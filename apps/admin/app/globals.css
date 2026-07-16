@@ -1,0 +1,201 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* v3.28.1 — theme-aware CSS variables.
+ *
+ * Each theme overrides the variable set via [data-theme="<name>"] on the
+ * <html> root. The root layout writes that attribute from NEXT_PUBLIC_THEME
+ * at render time, so swapping THEME in .env re-paints the whole dashboard
+ * without code edits.
+ *
+ * Defaults (:root) match the Atlas theme — that's the scaffold default.
+ * The legacy dark palette is preserved under [data-theme="midnight"] so
+ * teams that want the old look can opt in.
+ */
+
+/* atlas (default) — professional, blue/white, team/organisation */
+:root,
+[data-theme="atlas"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #0ea5e9;
+}
+
+/* aurora — friendly, pastel, consumer SaaS */
+[data-theme="aurora"] {
+  --bg-primary: #fafaf9;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f5f5f4;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f5f5f4;
+  --border: #e7e5e4;
+  --text-primary: #1c1917;
+  --text-secondary: #57534e;
+  --text-muted: #a8a29e;
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #0ea5e9;
+}
+
+/* pulse — bold, ecommerce/brand. Primary stays near-black so CTAs read
+ * white-on-black; the yellow brand mark lives in auth via theme tokens. */
+[data-theme="pulse"] {
+  --bg-primary: #fafaf9;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f5f5f4;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f5f5f4;
+  --border: #e5e5e5;
+  --text-primary: #0f0f0f;
+  --text-secondary: #525252;
+  --text-muted: #a3a3a3;
+  --accent: #0f0f0f;
+  --accent-hover: #1f1f1f;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #fbbf24;
+  --info: #0284c7;
+}
+
+/* midnight — legacy v3.27 dark look. Opt in by setting THEME=midnight or
+ * adding data-theme="midnight" on a specific surface. */
+[data-theme="midnight"] {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #111118;
+  --bg-tertiary: #1a1a24;
+  --bg-elevated: #22222e;
+  --bg-hover: #2a2a38;
+  --border: #2a2a3a;
+  --text-primary: #e8e8f0;
+  --text-secondary: #9090a8;
+  --text-muted: #606078;
+  --accent: #6c5ce7;
+  --accent-hover: #7c6cf7;
+  --success: #00b894;
+  --danger: #ff6b6b;
+  --warning: #fdcb6e;
+  --info: #74b9ff;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 3px;
+}
+
+/* Sonner toaster — bridge our theme tokens into sonner's richColors slots
+ * so success = Grit --success, error = Grit --danger, etc. Works across
+ * every theme because each [data-theme] already redefines these tokens. */
+[data-sonner-toaster] {
+  --normal-bg: var(--bg-elevated);
+  --normal-text: var(--text-primary);
+  --normal-border: var(--border);
+
+  --success-bg: color-mix(in srgb, var(--success) 14%, var(--bg-elevated));
+  --success-text: var(--success);
+  --success-border: color-mix(in srgb, var(--success) 32%, transparent);
+
+  --error-bg: color-mix(in srgb, var(--danger) 14%, var(--bg-elevated));
+  --error-text: var(--danger);
+  --error-border: color-mix(in srgb, var(--danger) 32%, transparent);
+
+  --warning-bg: color-mix(in srgb, var(--warning) 16%, var(--bg-elevated));
+  --warning-text: var(--warning);
+  --warning-border: color-mix(in srgb, var(--warning) 36%, transparent);
+
+  --info-bg: color-mix(in srgb, var(--info) 14%, var(--bg-elevated));
+  --info-text: var(--info);
+  --info-border: color-mix(in srgb, var(--info) 32%, transparent);
+}
+
+[data-sonner-toast].grit-toast [data-icon] svg {
+  width: 18px;
+  height: 18px;
+}
+
+
+/* v3.31 — Dark mode. The DarkModeToggle component writes three signals
+ * to <html> on every flip: class="dark", data-theme-mode="dark", and
+ * style="color-scheme: dark". We honour the two pertinent to CSS here.
+ * The active data-theme (atlas / aurora / pulse) keeps its accent hue;
+ * only the surface + text variables flip. */
+
+.dark,
+[data-theme-mode="dark"] {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #111118;
+  --bg-tertiary: #1a1a24;
+  --bg-elevated: #22222e;
+  --bg-hover: #2a2a38;
+  --border: #2a2a3a;
+  --text-primary: #e8e8f0;
+  --text-secondary: #9090a8;
+  --text-muted: #606078;
+}
+
+/* Per-theme accent lifts so blue/purple/black don't disappear on the
+ * dark canvas. These come after the base dark block on purpose — the
+ * surface tokens above stay; only the brand colours refresh. */
+
+.dark[data-theme="atlas"],
+[data-theme-mode="dark"][data-theme="atlas"] {
+  --accent: #60a5fa;
+  --accent-hover: #93c5fd;
+}
+
+.dark[data-theme="aurora"],
+[data-theme-mode="dark"][data-theme="aurora"] {
+  --accent: #a78bfa;
+  --accent-hover: #c4b5fd;
+}
+
+.dark[data-theme="pulse"],
+[data-theme-mode="dark"][data-theme="pulse"] {
+  --accent: #fbbf24;
+  --accent-hover: #fcd34d;
+}
+
+/* Form controls + selection still need the dark hint or the browser
+ * renders them with the OS light scheme regardless of our vars. */
+.dark input,
+.dark textarea,
+.dark select,
+[data-theme-mode="dark"] input,
+[data-theme-mode="dark"] textarea,
+[data-theme-mode="dark"] select {
+  color-scheme: dark;
+}

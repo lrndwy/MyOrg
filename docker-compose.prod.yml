@@ -1,0 +1,146 @@
+# Production stack.
+#
+# By default this file publishes app ports to the host so you can open:
+#   Web   → http://localhost:3000
+#   Admin → http://localhost:3001
+#   API   → http://localhost:8080
+#   MinIO → http://localhost:9002 (API) / http://localhost:9003 (console)
+#
+# On a real public VPS behind Traefik/Caddy/nginx, remove the `ports:`
+# blocks (keep `expose:`) so only the reverse proxy reaches the containers.
+# Postgres and Redis stay internal-only (no host ports) on purpose.
+#
+# Reverse proxy mapping (when not using host ports):
+#   - api.domain.com   → api:8080
+#   - admin.domain.com → admin:3000
+#   - www.domain.com   → web:3000
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: myorg-api
+    restart: unless-stopped
+    expose:
+      - "8080"
+    ports:
+      - "${API_PORT}:8080"
+    env_file:
+      - .env
+    # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB come from .env
+    # (env_file above). We override POSTGRES_HOST so the API hits the
+    # postgres container on the Docker network, and POSTGRES_PORT back
+    # to 5432 because the postgres container listens on 5432 internally
+    # — only the dev host port mapping uses 5434. The Go config builds
+    # DATABASE_URL from these parts at startup.
+    environment:
+      APP_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      # Browser calls API at host-mapped port
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - myorg
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
+    container_name: myorg-web
+    restart: unless-stopped
+    expose:
+      - "3000"
+    ports:
+      - "${WEB_PORT}:3000"
+    networks:
+      - myorg
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
+    container_name: myorg-admin
+    restart: unless-stopped
+    expose:
+      - "3000"
+    ports:
+      - "${ADMIN_PORT}:3000"
+    networks:
+      - myorg
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: myorg-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Identical credentials to the api service above — they come from the
+    # SAME .env block, so they can't drift. The :-grit fallbacks below
+    # protect against a missing env var blocking startup.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-grit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-grit}
+      POSTGRES_DB: ${POSTGRES_DB:-myorg}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-grit} -d ${POSTGRES_DB:-myorg}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - myorg
+
+  redis:
+    image: redis:7-alpine
+    container_name: myorg-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - myorg
+
+  minio:
+    image: minio/minio
+    container_name: myorg-minio
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - myorg
+    command: server /data --console-address ":9001"
+
+networks:
+  myorg:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

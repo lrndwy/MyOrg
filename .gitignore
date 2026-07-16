@@ -1,0 +1,88 @@
+# ─── Dependencies ───────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+
+# ─── Environment & secrets (never commit) ───────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+!.env.example
+
+# ─── Next.js / Node build output ────────────────────────────────────────────
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# ─── Turborepo ──────────────────────────────────────────────────────────────
+.turbo/
+
+# ─── Go ─────────────────────────────────────────────────────────────────────
+tmp/
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+migrate.exe
+/apps/api/server
+/apps/api/migrate
+/apps/api/seed
+
+# Local Go module / build caches (if present in repo root)
+.gomodcache/
+.go-mod-cache/
+.gobuildcache/
+.go-build-cache/
+
+# ─── SQLite / embedded stores (Pulse, Sentinel, local DB) ───────────────────
+*.db
+*.db-shm
+*.db-wal
+sentinel.db
+sentinel.db-shm
+sentinel.db-wal
+pulse.db
+*.sqlite
+*.sqlite3
+
+# ─── Docker local volumes (if bind-mounted) ─────────────────────────────────
+postgres-data/
+redis-data/
+minio-data/
+
+# ─── Testing ────────────────────────────────────────────────────────────────
+coverage/
+e2e/test-results/
+e2e/playwright-report/
+playwright-report/
+test-results/
+
+# ─── Logs & debug ───────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── IDE & OS ───────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.pem
+*.key
+
+# ─── Misc ───────────────────────────────────────────────────────────────────
+.cache/
+*.bak
+*.tmp
