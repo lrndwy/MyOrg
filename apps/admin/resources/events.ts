@@ -1,4 +1,5 @@
 import { defineResource } from "@/lib/resource";
+import { divisionName } from "@/lib/resource-cells";
 
 export const eventResource = defineResource({
   name: "Event",
@@ -11,7 +12,11 @@ export const eventResource = defineResource({
       // grit:cols:auto-start
       { key: "title", label: "Title", sortable: true, searchable: true },
       { key: "description", label: "Description", searchable: true },
-      { key: "division.name", label: "Division" },
+      {
+        key: "division",
+        label: "Division",
+        cell: (row) => divisionName(row),
+      },
       { key: "location", label: "Location", sortable: true, searchable: true },
       { key: "banner_url", label: "Banner", format: "image" },
       { key: "start_time", label: "Start Time", sortable: true, format: "relative" },
@@ -30,7 +35,6 @@ export const eventResource = defineResource({
         },
       },
       { key: "created_at", label: "Created", sortable: true, format: "relative" },
-      { key: "division", label: "Division" },
       // grit:cols:auto-end
     ],
     filters: [
@@ -82,7 +86,6 @@ export const eventResource = defineResource({
           { label: "Cancelled", value: "cancelled" },
         ],
       },
-      { key: "division", label: "Division", type: "text" },
       // grit:fields:auto-end
     ],
   },
