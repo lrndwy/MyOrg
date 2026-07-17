@@ -2,6 +2,27 @@ import axios from "axios";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
+// crypto.randomUUID() is secure-context only (HTTPS / localhost).
+// Production served over plain HTTP throws "crypto.randomUUID is not a function".
+function generateIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // Auth storage policy (Grit 3.27+):
 //   - The API issues HttpOnly grit_access + grit_refresh cookies on
 //     login / register / refresh / OAuth callback. The browser stores
@@ -86,7 +107,7 @@ apiClient.interceptors.request.use((config) => {
   const method = (config.method || "get").toUpperCase();
   const unsafe = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
   if (unsafe && config.headers && !config.headers["Idempotency-Key"]) {
-    config.headers["Idempotency-Key"] = crypto.randomUUID();
+    config.headers["Idempotency-Key"] = generateIdempotencyKey();
   }
   return config;
 });
