@@ -1,9 +1,8 @@
 import { defineResource } from "@/lib/resource";
-import { WEB_APP_URL } from "@/lib/panel-access";
+import { getWebAppUrl } from "@/lib/panel-access";
 
 function publicRecruitmentUrl(slug: string): string {
-  const base = WEB_APP_URL.replace(/\/$/, "");
-  return `${base}/recruitment/${encodeURIComponent(slug)}`;
+  return `${getWebAppUrl()}/recruitment/${encodeURIComponent(slug)}`;
 }
 
 export const recruitmentResource = defineResource({

@@ -12,6 +12,63 @@ export function canAccessAdminPanel(role: string | null | undefined): boolean {
   return role != null && ADMIN_PANEL_ROLES.includes(role);
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "::1"
+  );
+}
+
+/**
+ * Resolve a NEXT_PUBLIC_* app URL for cross-app navigation.
+ *
+ * NEXT_PUBLIC_* values are baked at build time and often still say
+ * localhost after a server deploy. When the browser is already on a
+ * public IP/domain, rewrite the configured localhost host to the
+ * current hostname (keeping the configured port) so Web ↔ Admin links
+ * stay on the same machine the user reached.
+ */
+export function resolvePublicAppUrl(
+  configured: string | undefined,
+  fallback: string
+): string {
+  const raw = (configured || fallback).trim().replace(/\/$/, "") || fallback;
+  try {
+    const cfg = new URL(raw);
+    if (typeof window === "undefined") {
+      return cfg.origin;
+    }
+    if (isLoopbackHost(cfg.hostname) && !isLoopbackHost(window.location.hostname)) {
+      cfg.protocol = window.location.protocol;
+      cfg.hostname = window.location.hostname;
+    }
+    return cfg.origin;
+  } catch {
+    return raw;
+  }
+}
+
+/** True when `targetOrigin` is the configured admin app, including the
+ *  runtime-rewritten origin used when the build still points at localhost. */
+export function isAdminAppOrigin(
+  targetOrigin: string,
+  configuredAdminUrl?: string
+): boolean {
+  const fallback = "http://localhost:3001";
+  const configured = configuredAdminUrl || fallback;
+  try {
+    if (targetOrigin === new URL(configured).origin) return true;
+    if (targetOrigin === resolvePublicAppUrl(configuredAdminUrl, fallback)) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export const API_ROUTES = {
   AUTH: {
     LOGIN: "/api/auth/login",

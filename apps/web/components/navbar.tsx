@@ -14,8 +14,8 @@ import { canAccessAdminPanel } from "@repo/shared/constants";
 import { useIsAuthenticated } from "@/lib/auth";
 import { useLogout, useMe } from "@/hooks/use-auth";
 import { usePublicSettings } from "@/hooks/use-public-settings";
-
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3001";
+import { getAdminAppUrl } from "@/lib/app-urls";
+import { NotificationBell } from "@/components/notification-bell";
 
 const authLinks = [
   { href: "/dashboard", label: "Dashboard" },
@@ -129,9 +129,10 @@ export function Navbar() {
 
         {/* Desktop actions */}
         <div className="hidden items-center gap-2 md:flex">
+          {user && <NotificationBell />}
           {showAdminLink && (
             <a
-              href={ADMIN_URL}
+              href={getAdminAppUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-hover hover:text-foreground"
@@ -200,7 +201,9 @@ export function Navbar() {
         </div>
 
         {/* Mobile: overflow for Admin / Logout (primary tabs live in bottom nav) */}
-        <div className="relative md:hidden" ref={mobileMoreRef}>
+        <div className="flex items-center gap-1 md:hidden">
+          {user && <NotificationBell />}
+          <div className="relative" ref={mobileMoreRef}>
           {user ? (
             <>
               <button
@@ -219,7 +222,7 @@ export function Navbar() {
                 >
                   {showAdminLink && (
                     <a
-                      href={ADMIN_URL}
+                      href={getAdminAppUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
                       role="menuitem"
@@ -254,6 +257,7 @@ export function Navbar() {
               Login
             </Link>
           )}
+          </div>
         </div>
       </div>
     </header>

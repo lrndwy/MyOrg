@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getWebAppUrl } from "@/lib/panel-access";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -166,12 +167,10 @@ apiClient.interceptors.response.use(
         // The cookies are HttpOnly so we can't expire them from JS.
         // Session expired — send user to the centralized web login.
         if (typeof window !== "undefined") {
-          const web =
-            process.env.NEXT_PUBLIC_WEB_URL || "http://localhost:3000";
           const next = encodeURIComponent(
             `${window.location.origin}/dashboard`
           );
-          window.location.href = `${web}/login?next=${next}`;
+          window.location.href = `${getWebAppUrl()}/login?next=${next}`;
         }
         return Promise.reject(refreshError);
       } finally {

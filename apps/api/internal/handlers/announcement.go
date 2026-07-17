@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"myorg/apps/api/internal/export"
+	"myorg/apps/api/internal/jobs"
 	"myorg/apps/api/internal/models"
 	"myorg/apps/api/internal/paginate"
 	"myorg/apps/api/internal/services"
@@ -16,7 +18,8 @@ import (
 
 // AnnouncementHandler handles announcement endpoints.
 type AnnouncementHandler struct {
-	DB *gorm.DB
+	DB   *gorm.DB
+	Jobs *jobs.Client
 }
 
 // List returns a paginated list of announcements.
@@ -214,6 +217,12 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 	h.DB.Preload("TargetDivision").Preload("Attachments").First(item, "id = ?", item.ID)
 
 	services.LogCreate(h.DB, c, "Announcement", item.Title, item.ID, "")
+
+	if h.Jobs != nil {
+		if err := h.Jobs.EnqueueAnnouncementNotify(c.Request.Context(), item.ID); err != nil {
+			log.Printf("announcement: enqueue notify for %s: %v", item.ID, err)
+		}
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"data":    item,

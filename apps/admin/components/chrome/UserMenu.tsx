@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useMe, useLogout } from "@/hooks/use-auth";
-import { WEB_APP_URL } from "@/lib/panel-access";
+import { getWebAppUrl } from "@/lib/panel-access";
 import { Activity, User as UserIcon, LogOut, Globe, ExternalLink } from "@/lib/icons";
-
-const WEB_PORTAL_URL = `${WEB_APP_URL.replace(/\/$/, "")}/dashboard`;
 
 /**
  * Avatar button + dropdown. Click outside to close. Click items to
@@ -18,6 +16,7 @@ export function UserMenu() {
   const { mutate: logout } = useLogout();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const webPortalUrl = `${getWebAppUrl()}/dashboard`;
 
   useEffect(() => {
     if (!open) return;
@@ -59,7 +58,7 @@ export function UserMenu() {
           </div>
           <nav className="py-1 text-sm">
             <a
-              href={WEB_PORTAL_URL}
+              href={webPortalUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOpen(false)}

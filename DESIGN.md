@@ -199,7 +199,19 @@ Service `LetterService.Create` (outgoing dari `LetterTemplate`):
 Pakai `asynq` job async agar request utama tetap cepat:
 - Hasil import user → email berisi kredensial (opsional, bisa dimatikan via settings).
 - Approval/rejection perizinan → notifikasi in-app + email ke user pengaju.
-- Announcement baru dengan `target_type != all` → notifikasi ke user divisi terkait.
+- **Announcement baru** → job `announcement:notify`:
+  1. Resolve penerima (`target_type=all` → semua user aktif; `division` → user di divisi tersebut).
+  2. Buat baris `notifications` (`source=announcement`) per user → tampil di bell web/admin.
+  3. Kirim **Web Push** ke `push_subscriptions` browser yang sudah subscribe (PWA).
+
+**PWA (apps/web):**
+- `app/manifest.ts` + icons di `public/icons/` — installable di home screen.
+- `public/sw.js` — handle `push` + `notificationclick` → buka `/announcements`.
+- Endpoint auth: `GET /api/push/vapid-public-key`, `POST/DELETE /api/push/subscribe`.
+- Env: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:…). Generate: `go run` helper atau `npx web-push generate-vapid-keys`.
+- **Syarat browser:** HTTPS (atau localhost). iOS butuh “Add to Home Screen” dulu.
+
+Model `PushSubscription`: `user_id`, `endpoint` (unique), `p256dh`, `auth`.
 
 ### 5.5 Visibility Divisi
 Query event & data lain memakai filter di service layer:

@@ -147,17 +147,28 @@ func main() {
 	// Start background worker
 	var workerStop func()
 	if cfg.RedisURL != "" {
+		pushSvc := &services.PushService{
+			DB:              db,
+			VAPIDPublicKey:  cfg.VAPIDPublicKey,
+			VAPIDPrivateKey: cfg.VAPIDPrivateKey,
+			VAPIDSubject:    cfg.VAPIDSubject,
+			WebAppURL:       cfg.WebAppURL,
+		}
 		stop, err := jobs.StartWorker(cfg.RedisURL, jobs.WorkerDeps{
 			DB:      db,
 			Mailer:  mailer,
 			Storage: storageService,
 			Cache:   cacheService,
+			Push:    pushSvc,
 		})
 		if err != nil {
 			log.Printf("Warning: Background worker failed to start: %v", err)
 		} else {
 			workerStop = stop
 			log.Println("Background worker started")
+		}
+		if cfg.VAPIDPublicKey == "" || cfg.VAPIDPrivateKey == "" {
+			log.Println("Warning: VAPID keys not set — Web Push for announcements disabled")
 		}
 	}
 

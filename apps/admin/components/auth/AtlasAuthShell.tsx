@@ -6,7 +6,7 @@ import type { ThemeTokens } from "@repo/shared/themes";
 import { brand } from "@repo/shared/brand";
 import { SocialAuthButtons, SocialAuthDivider } from "./SocialAuthButtons";
 import type { AuthMode } from "./AuthShell";
-import { WEB_APP_URL } from "@/lib/panel-access";
+import { getWebAppUrl } from "@/lib/panel-access";
 
 interface Props {
   theme: ThemeTokens;
@@ -18,17 +18,24 @@ interface Props {
   showSocial?: boolean;
 }
 
-const switchLinks: Record<AuthMode, { hint: string; href: string; label: string }> = {
-  "login":    { hint: "Don't have an account?", href: "/sign-up",         label: "Create one" },
-  "sign-up":  { hint: "Already have an account?", href: `${WEB_APP_URL}/login`, label: "Sign in" },
-  "forgot":   { hint: "Remembered your password?", href: `${WEB_APP_URL}/login`, label: "Back to sign in" },
-  "reset":    { hint: "Remembered your password?", href: `${WEB_APP_URL}/login`, label: "Back to sign in" },
-};
+function switchLink(mode: AuthMode): { hint: string; href: string; label: string } {
+  const webLogin = `${getWebAppUrl()}/login`;
+  switch (mode) {
+    case "login":
+      return { hint: "Don't have an account?", href: "/sign-up", label: "Create one" };
+    case "sign-up":
+      return { hint: "Already have an account?", href: webLogin, label: "Sign in" };
+    case "forgot":
+      return { hint: "Remembered your password?", href: webLogin, label: "Back to sign in" };
+    case "reset":
+      return { hint: "Remembered your password?", href: webLogin, label: "Back to sign in" };
+  }
+}
 
 export function AtlasAuthShell({ theme, mode, title, subtitle, children, errorMessage, showSocial = true }: Props) {
   const t = theme.colors;
   const f = theme.fonts;
-  const sw = switchLinks[mode];
+  const sw = switchLink(mode);
 
   return (
     <div

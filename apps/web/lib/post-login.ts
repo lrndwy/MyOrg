@@ -1,8 +1,6 @@
-import { canAccessAdminPanel } from "@repo/shared/constants";
+import { canAccessAdminPanel, isAdminAppOrigin } from "@repo/shared/constants";
 import type { User } from "@repo/shared/types";
-
-const ADMIN_URL =
-  process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3001";
+import { getConfiguredAdminAppUrl } from "./app-urls";
 
 /**
  * After a successful sign-in on the centralized web login, send the user
@@ -24,15 +22,17 @@ export function resolvePostLoginDestination(
 
   try {
     const target = new URL(next);
-    const admin = new URL(ADMIN_URL);
     if (
-      target.origin === admin.origin &&
+      isAdminAppOrigin(target.origin, getConfiguredAdminAppUrl()) &&
       canAccessAdminPanel(user.role)
     ) {
       return target.toString();
     }
     // Same-origin absolute URL for the web app
-    if (typeof window !== "undefined" && target.origin === window.location.origin) {
+    if (
+      typeof window !== "undefined" &&
+      target.origin === window.location.origin
+    ) {
       return `${target.pathname}${target.search}${target.hash}`;
     }
   } catch {

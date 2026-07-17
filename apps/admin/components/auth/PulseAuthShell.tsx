@@ -7,7 +7,7 @@ import type { ThemeTokens } from "@repo/shared/themes";
 import { brand } from "@repo/shared/brand";
 import { SocialAuthButtons, SocialAuthDivider } from "./SocialAuthButtons";
 import type { AuthMode } from "./AuthShell";
-import { WEB_APP_URL } from "@/lib/panel-access";
+import { getWebAppUrl } from "@/lib/panel-access";
 
 interface Props {
   theme: ThemeTokens;
@@ -19,17 +19,24 @@ interface Props {
   showSocial?: boolean;
 }
 
-const switchLinks: Record<AuthMode, { hint: string; href: string; label: string }> = {
-  "login":    { hint: "New here?", href: "/sign-up",          label: "Create an account" },
-  "sign-up":  { hint: "Already signed up?", href: `${WEB_APP_URL}/login`, label: "Log in" },
-  "forgot":   { hint: "Got it back?", href: `${WEB_APP_URL}/login`, label: "Back to sign in" },
-  "reset":    { hint: "Got it back?", href: `${WEB_APP_URL}/login`, label: "Back to sign in" },
-};
+function switchLink(mode: AuthMode): { hint: string; href: string; label: string } {
+  const webLogin = `${getWebAppUrl()}/login`;
+  switch (mode) {
+    case "login":
+      return { hint: "New here?", href: "/sign-up", label: "Create an account" };
+    case "sign-up":
+      return { hint: "Already signed up?", href: webLogin, label: "Log in" };
+    case "forgot":
+      return { hint: "Got it back?", href: webLogin, label: "Back to sign in" };
+    case "reset":
+      return { hint: "Got it back?", href: webLogin, label: "Back to sign in" };
+  }
+}
 
 export function PulseAuthShell({ theme, mode, title, subtitle, children, errorMessage, showSocial = true }: Props) {
   const t = theme.colors;
   const f = theme.fonts;
-  const sw = switchLinks[mode];
+  const sw = switchLink(mode);
 
   return (
     <div

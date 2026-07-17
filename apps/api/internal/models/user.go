@@ -143,6 +143,7 @@ func Models() []interface{} {
 		&Announcement{},
 		&AnnouncementAttachment{},
 		&LetterTemplate{},
+		&PushSubscription{},
 		// grit:models
 	}
 }

@@ -25,9 +25,7 @@ import {
   ExternalLink,
 } from "@/lib/icons";
 import type { User } from "@repo/shared/types";
-import { WEB_APP_URL } from "@/lib/panel-access";
-
-const WEB_PORTAL_URL = `${WEB_APP_URL.replace(/\/$/, "")}/dashboard`;
+import { getWebAppUrl } from "@/lib/panel-access";
 
 // GRIT_CLI_VERSION is the scaffold version that generated this file.
 // Surfaced in the sidebar footer so the user can quickly see what Grit
@@ -139,6 +137,7 @@ export function CollapsibleSidebar({
   const pathname = usePathname();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const { data: orgSettings } = usePublicSettings();
+  const webPortalUrl = `${getWebAppUrl()}/dashboard`;
 
   // Prefer Org Settings (runtime); fall back to static brand.config.
   const brandName = orgSettings?.web_name?.trim() || brand.name;
@@ -237,7 +236,7 @@ export function CollapsibleSidebar({
             onClick={onMobileClose}
           />
           <a
-            href={WEB_PORTAL_URL}
+            href={webPortalUrl}
             target="_blank"
             rel="noopener noreferrer"
             onClick={onMobileClose}
@@ -395,6 +394,7 @@ function SidebarUserMenu({ user, collapsed }: { user: User; collapsed: boolean }
   const { mutate: logout } = useLogout();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const webPortalUrl = `${getWebAppUrl()}/dashboard`;
 
   useEffect(() => {
     if (!open) return;
@@ -447,7 +447,7 @@ function SidebarUserMenu({ user, collapsed }: { user: User; collapsed: boolean }
           </div>
           <nav className="py-1 text-sm">
             <a
-              href={WEB_PORTAL_URL}
+              href={webPortalUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOpen(false)}

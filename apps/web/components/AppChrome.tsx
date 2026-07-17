@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
+import { PwaPushPrompt } from "@/components/pwa-push-prompt";
 import { useMe } from "@/hooks/use-auth";
 
 const CHROMELESS_PREFIXES = [
@@ -44,6 +45,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         <Footer />
       </div>
       <MobileBottomNav />
+      <PwaPushPrompt />
     </div>
   );
 }

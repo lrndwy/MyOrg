@@ -299,6 +299,14 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// In-app Security + Observability dashboards — read from Sentinel/Pulse APIs
 	// over loopback. notificationHandler powers the admin bell.
 	notificationHandler := &handlers.NotificationHandler{DB: db}
+	pushService := &services.PushService{
+		DB:              db,
+		VAPIDPublicKey:  cfg.VAPIDPublicKey,
+		VAPIDPrivateKey: cfg.VAPIDPrivateKey,
+		VAPIDSubject:    cfg.VAPIDSubject,
+		WebAppURL:       cfg.WebAppURL,
+	}
+	pushHandler := &handlers.PushHandler{DB: db, Push: pushService}
 	securityHandler := &handlers.SecurityHandler{Bridge: svc.SecObs}
 	observabilityHandler := &handlers.ObservabilityHandler{Bridge: svc.SecObs}
 
@@ -396,7 +404,8 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		},
 	}
 	announcementHandler := &handlers.AnnouncementHandler{
-		DB: db,
+		DB:   db,
+		Jobs: svc.Jobs,
 	}
 	announcementAttachmentHandler := &handlers.AnnouncementAttachmentHandler{
 		DB: db,
@@ -602,6 +611,10 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.GET("/notifications", notificationHandler.List)
 		protected.POST("/notifications/:id/read", notificationHandler.MarkRead)
 		protected.POST("/notifications/read-all", notificationHandler.MarkAllRead)
+
+		protected.GET("/push/vapid-public-key", pushHandler.VapidPublicKey)
+		protected.POST("/push/subscribe", pushHandler.Subscribe)
+		protected.DELETE("/push/subscribe", pushHandler.Unsubscribe)
 
 		// v3.31.40 — per-user dashboard layout customisation.
 		protected.GET("/dashboard-layout", dashboardLayoutHandler.Get)

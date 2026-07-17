@@ -17,15 +17,17 @@ import (
 	"myorg/apps/api/internal/mail"
 	"myorg/apps/api/internal/files"
 	"myorg/apps/api/internal/models"
+	"myorg/apps/api/internal/services"
 	"myorg/apps/api/internal/storage"
 )
 
 // WorkerDeps holds dependencies needed by job handlers.
 type WorkerDeps struct {
-	DB      *gorm.DB
-	Mailer  *mail.Mailer
-	Storage *storage.Storage
-	Cache   *cache.Cache
+	DB              *gorm.DB
+	Mailer          *mail.Mailer
+	Storage         *storage.Storage
+	Cache           *cache.Cache
+	Push            *services.PushService
 }
 
 // ExponentialBackoff returns the delay before retry attempt n. The
@@ -79,6 +81,7 @@ func StartWorker(redisURL string, deps WorkerDeps) (func(), error) {
 	mux.HandleFunc(TypeBackupWeekly, handleBackupWeekly(deps))
 	mux.HandleFunc(TypeBackupScheduled, handleBackupScheduled(deps))
 	mux.HandleFunc(TypeEventStatusTransition, HandleEventStatusTransition(deps.DB))
+	mux.HandleFunc(TypeAnnouncementNotify, handleAnnouncementNotify(deps))
 
 	go func() {
 		if err := srv.Run(mux); err != nil {
@@ -256,5 +259,21 @@ func handleBackupScheduled(deps WorkerDeps) func(ctx context.Context, task *asyn
 		log.Printf("Scheduled backup %s complete — %d tables, %d rows, %.1f KB",
 			rec.ID, rec.TableCount, rec.RowCount, float64(rec.SizeBytes)/1024)
 		return nil
+	}
+}
+
+func handleAnnouncementNotify(deps WorkerDeps) func(ctx context.Context, task *asynq.Task) error {
+	return func(ctx context.Context, task *asynq.Task) error {
+		if deps.Push == nil {
+			return fmt.Errorf("push service not configured")
+		}
+		var payload AnnouncementNotifyPayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			return fmt.Errorf("unmarshaling announcement notify payload: %w", err)
+		}
+		if payload.AnnouncementID == "" {
+			return fmt.Errorf("announcement_id is required")
+		}
+		return deps.Push.NotifyAnnouncement(ctx, payload.AnnouncementID)
 	}
 }

@@ -17,7 +17,9 @@ import {
 import { usePublicSettings } from "@/hooks/use-public-settings";
 import { clearTokens } from "@/lib/auth";
 import { navigateAfterLogin } from "@/lib/post-login";
+import { getConfiguredAdminAppUrl } from "@/lib/app-urls";
 import { TotpCodeInput } from "@/components/auth/totp-code-input";
+import { isAdminAppOrigin } from "@repo/shared/constants";
 
 type Step = "credentials" | "totp";
 
@@ -109,9 +111,10 @@ function LoginInner() {
     !!next &&
     (() => {
       try {
-        const admin =
-          process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3001";
-        return new URL(next).origin === new URL(admin).origin;
+        return isAdminAppOrigin(
+          new URL(next).origin,
+          getConfiguredAdminAppUrl()
+        );
       } catch {
         return false;
       }

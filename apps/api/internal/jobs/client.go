@@ -18,6 +18,7 @@ const (
 	TypeUploadsOrphanCleanup  = "uploads:cleanup_orphans" // v3.31.33
 	TypeBackupWeekly          = "backup:weekly"           // v3.31.77 (legacy)
 	TypeBackupScheduled       = "backup:scheduled"        // settings-driven auto backup
+	TypeAnnouncementNotify    = "announcement:notify"     // in-app + web-push for new announcements
 )
 
 // Default per-task settings used when a caller doesn't override via
@@ -188,6 +189,31 @@ type ImagePayload struct {
 	UploadID string `json:"upload_id"`
 	Key      string `json:"key"`
 	MimeType string `json:"mime_type"`
+}
+
+// AnnouncementNotifyPayload triggers in-app + web-push delivery for one announcement.
+type AnnouncementNotifyPayload struct {
+	AnnouncementID string `json:"announcement_id"`
+}
+
+// EnqueueAnnouncementNotify queues delivery after an announcement is created.
+func (c *Client) EnqueueAnnouncementNotify(ctx context.Context, announcementID string, opts ...EnqueueOption) error {
+	payload := AnnouncementNotifyPayload{AnnouncementID: announcementID}
+	opt := EnqueueOption{
+		IdempotencyKey: "announcement-notify:" + announcementID,
+		Queue:          "default",
+	}
+	if len(opts) > 0 {
+		opt = opts[0]
+		if opt.IdempotencyKey == "" {
+			opt.IdempotencyKey = "announcement-notify:" + announcementID
+		}
+	}
+	err := c.Enqueue(ctx, TypeAnnouncementNotify, payload, opt)
+	if errors.Is(err, ErrDuplicateTask) {
+		return nil
+	}
+	return err
 }
 
 // EnqueueSendEmail enqueues an email send job.

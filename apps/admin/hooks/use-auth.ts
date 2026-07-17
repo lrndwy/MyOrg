@@ -11,8 +11,8 @@ import { apiClient } from "@/lib/api-client";
 import {
   ADMIN_ACCESS_DENIED_MESSAGE,
   canAccessAdminPanel,
+  getWebAppUrl,
   redirectToWebLogin,
-  WEB_APP_URL,
 } from "@/lib/panel-access";
 
 // Auth flow (Grit 3.27+):
@@ -132,6 +132,6 @@ export function useLogout() {
 /** Send Panel Access USER back to the public web app. */
 export function redirectUserAwayFromAdmin() {
   if (typeof window !== "undefined") {
-    window.location.href = `${WEB_APP_URL}/dashboard`;
+    window.location.href = `${getWebAppUrl()}/dashboard`;
   }
 }

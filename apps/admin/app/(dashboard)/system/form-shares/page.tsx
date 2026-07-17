@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/chrome/PageHeader";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 import { Plus, Copy, Lock, Unlock, Trash2, X, ExternalLink, Activity, Pencil } from "@/lib/icons";
 import { toast } from "sonner";
+import { getWebAppUrl } from "@/lib/panel-access";
 
 interface FormShare {
   id: string;
@@ -33,10 +34,11 @@ interface FormSubmission {
   created_at: string;
 }
 
-// Web app origin for the shareable link. NEXT_PUBLIC_WEB_URL is set in
-// .env (defaults to http://localhost:3000) — same convention as the
-// API_URL constant used by the Sentinel/Pulse external links.
-const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL || "http://localhost:3000";
+// Web app origin for the shareable link. Rewrites localhost → current
+// host when the build still points at localhost after a server deploy.
+function webAppOrigin(): string {
+  return getWebAppUrl();
+}
 
 export default function FormSharesPage() {
   const [createOpen, setCreateOpen] = useState(false);
@@ -105,7 +107,7 @@ export default function FormSharesPage() {
 
 function ShareRow({ share }: { share: FormShare }) {
   const qc = useQueryClient();
-  const publicURL = WEB_URL + "/forms/" + share.token;
+  const publicURL = webAppOrigin() + "/forms/" + share.token;
   const [submissionsOpen, setSubmissionsOpen] = useState(false);
   // v3.31.50 — Edit modal lets the operator change the title,
   // description, password mode, and hidden fields after creation.

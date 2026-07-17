@@ -82,6 +82,12 @@ type Config struct {
 	GithubClientID     string
 	GithubClientSecret string
 	OAuthFrontendURL   string // Where to redirect after OAuth callback
+
+	// Web Push (VAPID) — required for PWA announcement notifications
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	VAPIDSubject    string // mailto:ops@example.com or https://example.com
+	WebAppURL       string // NEXT_PUBLIC_WEB_URL / public portal origin
 }
 
 // Load reads configuration from environment variables.
@@ -139,6 +145,11 @@ func Load() (*Config, error) {
 		GithubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
 		OAuthFrontendURL:   getEnv("OAUTH_FRONTEND_URL", "http://localhost:3001"),
+
+		VAPIDPublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
+		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
+		VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:noreply@localhost"),
+		WebAppURL:       getEnv("NEXT_PUBLIC_WEB_URL", getEnv("OAUTH_FRONTEND_URL", "http://localhost:3000")),
 	}
 
 	// DatabaseURL is always populated by resolveDatabaseURL() — either from
