@@ -1,3 +1,7 @@
+"use client";
+
+import { CustomSelect } from "@/components/ui/custom-select";
+
 interface TablePaginationProps {
   page: number;
   pageSize: number;
@@ -6,6 +10,11 @@ interface TablePaginationProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
 }
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100].map((size) => ({
+  value: String(size),
+  label: `${size} / page`,
+}));
 
 export function TablePagination({
   page,
@@ -26,17 +35,14 @@ export function TablePagination({
         <p className="text-sm text-text-muted">
           Showing {start}–{end} of {total}
         </p>
-        <select
-          value={pageSize}
-          onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          className="rounded-lg border border-border bg-bg-tertiary px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
-        >
-          {[10, 20, 50, 100].map((size) => (
-            <option key={size} value={size}>
-              {size} / page
-            </option>
-          ))}
-        </select>
+        <div className="w-[120px]">
+          <CustomSelect
+            value={String(pageSize)}
+            onChange={(value) => onPageSizeChange(Number(value))}
+            options={PAGE_SIZE_OPTIONS}
+            size="compact"
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-1">

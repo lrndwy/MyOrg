@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +15,8 @@ import (
 
 // RolePermissionHandler handles rolepermission endpoints.
 type RolePermissionHandler struct {
-	DB *gorm.DB
+	DB      *gorm.DB
+	Service *services.RolePermissionService
 }
 
 // List returns a paginated list of role_permissions.
@@ -365,5 +367,76 @@ func (h *RolePermissionHandler) Delete(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "RolePermission deleted successfully",
+	})
+}
+
+// Matrix returns every permission (grouped-ready, ordered by module/code)
+// plus the subset already granted to the role — the admin panel renders
+// this as a checkbox matrix so an operator can see + change many
+// permissions for one role on a single screen.
+//
+//	GET /api/roles/:id/permissions
+func (h *RolePermissionHandler) Matrix(c *gin.Context) {
+	roleID := c.Param("id")
+
+	role, permissions, assignedIDs, err := h.Service.PermissionsMatrixForRole(roleID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": gin.H{
+				"code":    "NOT_FOUND",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"role":         role,
+			"permissions":  permissions,
+			"assigned_ids": assignedIDs,
+		},
+	})
+}
+
+// Sync replaces every permission granted to a role with the given set —
+// lets the admin panel's permission matrix save many checkbox changes in
+// one request instead of creating/deleting RolePermission rows one by one.
+//
+//	PUT /api/roles/:id/permissions
+//	Body: { "permission_ids": ["<uuid>", ...] }
+func (h *RolePermissionHandler) Sync(c *gin.Context) {
+	roleID := c.Param("id")
+
+	var req struct {
+		PermissionIDs []string `json:"permission_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": gin.H{
+				"code":    "VALIDATION_ERROR",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+
+	granted, err := h.Service.SyncPermissionsForRole(roleID, req.PermissionIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"code":    "INTERNAL_ERROR",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+
+	services.LogUpdate(h.DB, c, "RolePermission", roleID, roleID,
+		fmt.Sprintf("synced %d permission(s)", len(granted)))
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    granted,
+		"message": "Role permissions updated successfully",
 	})
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import type { FilterDefinition } from "@/lib/resource";
+import { CustomSelect } from "@/components/ui/custom-select";
 
 interface TableFiltersProps {
   filters: FilterDefinition[];
@@ -43,34 +44,40 @@ function FilterControl({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const allLabel = filter.placeholder ?? `Semua ${filter.label}`;
+
   switch (filter.type) {
     case "select":
       return (
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="rounded-lg border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-        >
-          <option value="">{filter.placeholder ?? `All ${filter.label}`}</option>
-          {filter.options?.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div className="min-w-[160px]">
+          <CustomSelect
+            value={value}
+            onChange={onChange}
+            options={filter.options ?? []}
+            placeholder={allLabel}
+            allowClear
+            clearLabel={allLabel}
+            size="compact"
+          />
+        </div>
       );
 
     case "boolean":
       return (
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="rounded-lg border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-        >
-          <option value="">{filter.placeholder ?? `All ${filter.label}`}</option>
-          <option value="true">Yes</option>
-          <option value="false">No</option>
-        </select>
+        <div className="min-w-[140px]">
+          <CustomSelect
+            value={value}
+            onChange={onChange}
+            options={[
+              { label: "Ya", value: "true" },
+              { label: "Tidak", value: "false" },
+            ]}
+            placeholder={allLabel}
+            allowClear
+            clearLabel={allLabel}
+            size="compact"
+          />
+        </div>
       );
 
     case "number-range":

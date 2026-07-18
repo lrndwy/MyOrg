@@ -98,11 +98,18 @@ function EventsList() {
                     {event.location}
                   </span>
                 )}
-                {(event.division?.name || event.division_id === null) && (
-                  <span className="text-text-muted">
-                    {event.division?.name || "General"}
-                  </span>
-                )}
+                {(() => {
+                  const divisionName =
+                    event.division &&
+                    typeof event.division === "object" &&
+                    "name" in event.division
+                      ? (event.division as { name: string }).name
+                      : null;
+                  if (!divisionName && event.division_id !== null) return null;
+                  return (
+                    <span className="text-text-muted">{divisionName || "General"}</span>
+                  );
+                })()}
               </div>
             </Link>
           ))}

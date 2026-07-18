@@ -15,6 +15,7 @@ export const letterResource = defineResource({
   endpoint: "/api/letters",
   icon: "Database",
   label: { singular: "Letter", plural: "Letters" },
+  viewPermission: "letters.view",
   table: {
     columns: [
       {

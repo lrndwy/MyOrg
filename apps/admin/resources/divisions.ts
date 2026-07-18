@@ -6,6 +6,7 @@ export const divisionResource = defineResource({
   endpoint: "/api/divisions",
   icon: "Database",
   label: { singular: "Division", plural: "Divisions" },
+  viewPermission: "divisions.view",
   table: {
     columns: [
       // grit:cols:auto-start

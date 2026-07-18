@@ -14,6 +14,7 @@ import { TableFilters } from "@/components/tables/table-filters";
 import { TablePagination } from "@/components/tables/table-pagination";
 import { TableToolbar } from "@/components/tables/table-toolbar";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { IncomingLetterManualReview } from "@/components/resource/incoming-letter-manual-review";
 import {
   useBulkDeleteResource,
   useDeleteResource,
@@ -24,7 +25,7 @@ import { apiClient, uploadFile } from "@/lib/api-client";
 import { Loader2, Plus, X, FileText } from "@/lib/icons";
 import { letterResource } from "@/resources/letters";
 import type { FileRef } from "@repo/shared/schemas";
-import type { Letter, LetterCategory, LetterTemplate } from "@repo/shared/types";
+import type { Letter, LetterTemplate } from "@repo/shared/types";
 
 type LetterType = "outgoing" | "incoming";
 
@@ -41,12 +42,6 @@ interface OutgoingForm {
   variables: Record<string, string>;
 }
 
-interface IncomingForm {
-  category_id: string;
-  subject: string;
-  document: FileRef | null;
-}
-
 const EMPTY_OUTGOING: OutgoingForm = {
   template_id: "",
   subject: "",
@@ -54,11 +49,18 @@ const EMPTY_OUTGOING: OutgoingForm = {
   variables: {},
 };
 
+interface IncomingForm {
+  subject: string;
+  document: FileRef | null;
+}
+
 const EMPTY_INCOMING: IncomingForm = {
-  category_id: "",
   subject: "",
   document: null,
 };
+
+const INCOMING_FILE_ACCEPT =
+  ".docx,.pdf,image/jpeg,image/png,image/webp,image/gif,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const LETTERS_ENDPOINT = letterResource.endpoint;
 
@@ -83,6 +85,30 @@ async function uploadAsFileRef(file: File): Promise<FileRef> {
   };
 }
 
+function extractApiErrorMessage(err: unknown): string {
+  const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+  return axiosErr?.response?.data?.error?.message || "Gagal memproses file surat masuk";
+}
+
+interface IncomingParseResult {
+  letter_code: string;
+  extracted_text: string;
+  detected: boolean;
+}
+
+async function parseIncomingDocument(ref: FileRef): Promise<IncomingParseResult> {
+  const { data } = await apiClient.post("/api/letters/parse-incoming", {
+    document_url: ref.url,
+    file_name: ref.name,
+  });
+  const payload = (data.data ?? data) as IncomingParseResult;
+  return {
+    letter_code: payload.letter_code ?? "",
+    extracted_text: payload.extracted_text ?? "",
+    detected: payload.detected ?? !!payload.letter_code,
+  };
+}
+
 export default function LettersPage() {
   const queryClient = useQueryClient();
   const resource = letterResource;
@@ -103,6 +129,12 @@ export default function LettersPage() {
   const [createType, setCreateType] = useState<LetterType>("outgoing");
   const [outgoing, setOutgoing] = useState<OutgoingForm>(EMPTY_OUTGOING);
   const [incoming, setIncoming] = useState<IncomingForm>(EMPTY_INCOMING);
+  const [parsedLetterCode, setParsedLetterCode] = useState("");
+  const [manualLetterCode, setManualLetterCode] = useState("");
+  const [extractedText, setExtractedText] = useState("");
+  const [manualReviewOpen, setManualReviewOpen] = useState(false);
+  const [parseLoading, setParseLoading] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [detectedVars, setDetectedVars] = useState<string[]>([]);
   const [varsLoading, setVarsLoading] = useState(false);
@@ -148,14 +180,6 @@ export default function LettersPage() {
   const { mutate: deleteItem, isPending: isDeleting } = useDeleteResource(LETTERS_ENDPOINT);
   const { mutate: bulkDelete, isPending: isBulkDeleting } =
     useBulkDeleteResource(LETTERS_ENDPOINT);
-
-  const categoriesQuery = useQuery({
-    queryKey: ["letter-categories"],
-    queryFn: async () => {
-      const { data } = await apiClient.get("/api/letter_categories?page_size=100");
-      return (data.data ?? []) as LetterCategory[];
-    },
-  });
 
   const templatesQuery = useQuery({
     queryKey: ["letter-templates"],
@@ -256,6 +280,11 @@ export default function LettersPage() {
     setPage(1);
   }, []);
 
+  const effectiveIncomingCode = useMemo(
+    () => (manualReviewOpen ? manualLetterCode.trim() : parsedLetterCode.trim()),
+    [manualReviewOpen, manualLetterCode, parsedLetterCode],
+  );
+
   const create = useToastedMutation({
     mutationFn: async () => {
       if (createType === "outgoing") {
@@ -282,13 +311,16 @@ export default function LettersPage() {
       if (!incoming.document) {
         throw new Error("File surat masuk wajib diunggah.");
       }
+      if (!incoming.subject.trim()) {
+        throw new Error("Subject surat masuk wajib diisi.");
+      }
       const payload = {
         type: "incoming",
-        category_id: incoming.category_id,
-        subject: incoming.subject || incoming.document.name,
+        subject: incoming.subject.trim(),
         document_url: incoming.document.url,
         document_key: incoming.document.key,
         file_name: incoming.document.name,
+        letter_code: effectiveIncomingCode,
       };
       const { data } = await apiClient.post("/api/letters", payload);
       return data.data as Letter;
@@ -299,6 +331,11 @@ export default function LettersPage() {
       setCreateOpen(false);
       setOutgoing(EMPTY_OUTGOING);
       setIncoming(EMPTY_INCOMING);
+      setParsedLetterCode("");
+      setManualLetterCode("");
+      setExtractedText("");
+      setManualReviewOpen(false);
+      setParseError(null);
       setDetectedVars([]);
     },
   });
@@ -307,17 +344,58 @@ export default function LettersPage() {
     if (createType === "outgoing") {
       return !!outgoing.template_id && !varsLoading && !varsError;
     }
-    return !!incoming.category_id && !!incoming.document;
-  }, [createType, outgoing, incoming, varsLoading, varsError]);
+    return (
+      !!incoming.subject.trim() &&
+      !!incoming.document &&
+      !!effectiveIncomingCode &&
+      !parseLoading
+    );
+  }, [createType, outgoing, incoming, varsLoading, varsError, effectiveIncomingCode, parseLoading]);
 
   const openCreate = (type: LetterType) => {
     setCreateType(type);
     setOutgoing(EMPTY_OUTGOING);
     setIncoming(EMPTY_INCOMING);
+    setParsedLetterCode("");
+    setManualLetterCode("");
+    setExtractedText("");
+    setManualReviewOpen(false);
+    setParseError(null);
+    setParseLoading(false);
     setDetectedVars([]);
     setVarsError(null);
     setCreateOpen(true);
   };
+
+  const handleIncomingUpload = useCallback(async (file: File) => {
+    setUploading(true);
+    setParseLoading(true);
+    setParseError(null);
+    setParsedLetterCode("");
+    setManualLetterCode("");
+    setExtractedText("");
+    setManualReviewOpen(false);
+    try {
+      const ref = await uploadAsFileRef(file);
+      setIncoming((f) => ({ ...f, document: ref }));
+      const result = await parseIncomingDocument(ref);
+      setExtractedText(result.extracted_text);
+      if (result.detected && result.letter_code) {
+        setParsedLetterCode(result.letter_code);
+        setManualReviewOpen(false);
+      } else {
+        setManualReviewOpen(true);
+        setManualLetterCode("");
+      }
+    } catch (e) {
+      setIncoming((f) => ({ ...f, document: null }));
+      setParseError(extractApiErrorMessage(e));
+      setManualReviewOpen(false);
+    } finally {
+      setUploading(false);
+      setParseLoading(false);
+    }
+  }, []);
 
   const handleDelete = useCallback((id: string) => {
     setDeletingId(id);
@@ -360,6 +438,7 @@ export default function LettersPage() {
       const ref = await uploadAsFileRef(file);
       const { data } = await apiClient.patch(`/api/letters/${viewingItem.id}`, {
         document_url: ref.url,
+        file_name: ref.name,
       });
       return data.data as Letter;
     },
@@ -515,7 +594,11 @@ export default function LettersPage() {
 
       {createOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
-          <div className="w-full max-w-2xl rounded-xl border border-border bg-bg-secondary shadow-xl">
+          <div
+            className={`w-full rounded-xl border border-border bg-bg-secondary shadow-xl ${
+              createType === "incoming" && manualReviewOpen ? "max-w-5xl" : "max-w-2xl"
+            }`}
+          >
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
@@ -524,7 +607,7 @@ export default function LettersPage() {
                 <p className="text-sm text-text-secondary">
                   {createType === "outgoing"
                     ? "Pilih template, isi variabel yang terdeteksi, lalu generate .docx."
-                    : "Unggah file surat masuk yang diterima."}
+                    : "Isi subject, unggah file. Nomor surat diparsing otomatis; jika gagal, pratinjau file dan input manual tersedia."}
                 </p>
               </div>
               <button
@@ -650,32 +733,13 @@ export default function LettersPage() {
                 <>
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                      Category *
-                    </label>
-                    <select
-                      value={incoming.category_id}
-                      onChange={(e) =>
-                        setIncoming((f) => ({ ...f, category_id: e.target.value }))
-                      }
-                      className="w-full rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-sm"
-                    >
-                      <option value="">Pilih kategori…</option>
-                      {(categoriesQuery.data ?? []).map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                      Subject
+                      Subject *
                     </label>
                     <input
                       value={incoming.subject}
                       onChange={(e) => setIncoming((f) => ({ ...f, subject: e.target.value }))}
                       className="w-full rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-sm"
-                      placeholder="Opsional"
+                      placeholder="Perihal / judul surat masuk"
                     />
                   </div>
                   <div>
@@ -683,25 +747,53 @@ export default function LettersPage() {
                       File Surat *
                     </label>
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border bg-bg-tertiary px-4 py-3 text-sm text-text-secondary hover:border-accent">
-                      <FileText className="h-4 w-4" />
-                      {incoming.document ? incoming.document.name : "Pilih file…"}
+                      {(uploading || parseLoading) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4" />
+                      )}
+                      {incoming.document ? incoming.document.name : "Pilih file (.docx, PDF, gambar)…"}
                       <input
                         type="file"
+                        accept={INCOMING_FILE_ACCEPT}
                         className="hidden"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          setUploading(true);
-                          try {
-                            const ref = await uploadAsFileRef(file);
-                            setIncoming((f) => ({ ...f, document: ref }));
-                          } finally {
-                            setUploading(false);
-                          }
+                          await handleIncomingUpload(file);
+                          e.target.value = "";
                         }}
                       />
                     </label>
+                    <p className="mt-1.5 text-xs text-text-muted">
+                      Format didukung: DOCX, PDF (termasuk hasil scan), JPG, PNG, WebP. PDF/gambar scan memakai OCR (service <code className="text-xs">ocr</code> di Docker).
+                    </p>
                   </div>
+                  {parseLoading && (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-secondary">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Memindai nomor surat dari file…
+                    </div>
+                  )}
+                  {parseError && (
+                    <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+                      {parseError}
+                    </div>
+                  )}
+                  {parsedLetterCode && !manualReviewOpen && (
+                    <div className="rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-foreground">
+                      Nomor surat terdeteksi:{" "}
+                      <span className="font-semibold font-mono">{parsedLetterCode}</span>
+                    </div>
+                  )}
+                  {manualReviewOpen && incoming.document && (
+                    <IncomingLetterManualReview
+                      document={incoming.document}
+                      extractedText={extractedText}
+                      letterCode={manualLetterCode}
+                      onLetterCodeChange={setManualLetterCode}
+                    />
+                  )}
                 </>
               )}
             </div>

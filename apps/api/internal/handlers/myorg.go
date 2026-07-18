@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,6 +25,7 @@ type MyOrgHandler struct {
 	RecruitmentFields    *services.RecruitmentCustomFieldService
 	RecruitmentSubmitSvc *services.RecruitmentSubmissionService
 	Permissions          *services.PermissionChecker
+	Uploads              *UploadHandler
 }
 
 // GetPublicSettings returns branding subset for login pages (public).
@@ -346,4 +348,80 @@ func (h *MyOrgHandler) SubmitPublicRecruitment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": item, "message": "Submission received"})
+}
+
+// UploadPublicRecruitmentFile stores a file for an open recruitment form (no auth).
+// Query: field_id (optional) — must reference a file-type custom field on this recruitment.
+func (h *MyOrgHandler) UploadPublicRecruitmentFile(c *gin.Context) {
+	if h.Uploads == nil || h.Uploads.Storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{"code": "STORAGE_UNAVAILABLE", "message": "File storage is not configured"},
+		})
+		return
+	}
+
+	slug := c.Param("slug")
+	var rec models.Recruitment
+	if err := h.DB.Where("slug = ? AND status = ?", slug, "open").First(&rec).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": gin.H{"code": "NOT_FOUND", "message": "Recruitment not found or closed"},
+		})
+		return
+	}
+
+	fieldID := c.Query("field_id")
+	if fieldID != "" {
+		var field models.RecruitmentCustomField
+		if err := h.DB.Where("id = ? AND recruitment_id = ?", fieldID, rec.ID).First(&field).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{"code": "INVALID_FIELD", "message": "Custom field not found for this recruitment"},
+			})
+			return
+		}
+		if field.FieldType != "file" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{"code": "INVALID_FIELD", "message": "Field is not a file upload"},
+			})
+			return
+		}
+		if accept := fileAcceptsFromOptions(field.FieldOptions); accept != "" {
+			q := c.Request.URL.Query()
+			q.Set("accepts", accept)
+			c.Request.URL.RawQuery = q.Encode()
+		}
+	} else if c.Query("accepts") == "" {
+		q := c.Request.URL.Query()
+		q.Set("accepts", "image,pdf,doc")
+		c.Request.URL.RawQuery = q.Encode()
+	}
+
+	var uploaderID string
+	if err := h.DB.Model(&models.User{}).Order("created_at ASC").Limit(1).Pluck("id", &uploaderID).Error; err != nil || uploaderID == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{"code": "UPLOAD_FAILED", "message": "No system user available for public uploads"},
+		})
+		return
+	}
+	c.Set("user_id", uploaderID)
+	h.Uploads.Create(c)
+}
+
+func fileAcceptsFromOptions(opts datatypes.JSONSlice[string]) string {
+	if len(opts) == 0 {
+		return ""
+	}
+	allowed := map[string]bool{
+		"image": true, "video": true, "pdf": true, "doc": true,
+		"excel": true, "csv": true, "zip": true, "archive": true, "all": true,
+	}
+	var parts []string
+	for _, raw := range opts {
+		for _, piece := range strings.Split(raw, ",") {
+			piece = strings.TrimSpace(strings.ToLower(piece))
+			if allowed[piece] {
+				parts = append(parts, piece)
+			}
+		}
+	}
+	return strings.Join(parts, ",")
 }

@@ -107,3 +107,75 @@ func (s *RolePermissionService) Delete(id string) error {
 	}
 	return nil
 }
+
+// PermissionsMatrixForRole returns every permission in the system (ordered
+// by module then code, so the admin UI can group checkboxes by module)
+// alongside the IDs already granted to the given role. Powers the
+// "select many at once" permission matrix — one query for the universe
+// of permissions, one for the role's current grants.
+func (s *RolePermissionService) PermissionsMatrixForRole(roleID string) (*models.Role, []models.Permission, []string, error) {
+	var role models.Role
+	if err := s.DB.First(&role, "id = ?", roleID).Error; err != nil {
+		return nil, nil, nil, fmt.Errorf("role not found: %w", err)
+	}
+
+	var permissions []models.Permission
+	if err := s.DB.Order("module asc, code asc").Find(&permissions).Error; err != nil {
+		return nil, nil, nil, fmt.Errorf("fetching permissions: %w", err)
+	}
+
+	var assignedIDs []string
+	if err := s.DB.Model(&models.RolePermission{}).
+		Where("role_id = ?", roleID).
+		Pluck("permission_id", &assignedIDs).Error; err != nil {
+		return nil, nil, nil, fmt.Errorf("fetching assigned permissions: %w", err)
+	}
+
+	return &role, permissions, assignedIDs, nil
+}
+
+// SyncPermissionsForRole replaces every RolePermission grant for a role with
+// the given set of permission IDs in one transaction — the admin panel's
+// permission matrix lets an operator check/uncheck many permissions and
+// save once, instead of creating RolePermission rows one at a time.
+// Deduplicates the input so a repeated checkbox id can't violate the
+// (role_id, permission_id) pairing.
+func (s *RolePermissionService) SyncPermissionsForRole(roleID string, permissionIDs []string) ([]models.RolePermission, error) {
+	var role models.Role
+	if err := s.DB.First(&role, "id = ?", roleID).Error; err != nil {
+		return nil, fmt.Errorf("role not found: %w", err)
+	}
+
+	seen := make(map[string]bool, len(permissionIDs))
+	unique := make([]string, 0, len(permissionIDs))
+	for _, id := range permissionIDs {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		unique = append(unique, id)
+	}
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", roleID).Delete(&models.RolePermission{}).Error; err != nil {
+			return fmt.Errorf("clearing existing role permissions: %w", err)
+		}
+		for _, permissionID := range unique {
+			row := models.RolePermission{RoleID: roleID, PermissionID: permissionID}
+			if err := tx.Create(&row).Error; err != nil {
+				return fmt.Errorf("granting permission %s: %w", permissionID, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var granted []models.RolePermission
+	if err := s.DB.Preload("Permission").Where("role_id = ?", roleID).
+		Order("created_at asc").Find(&granted).Error; err != nil {
+		return nil, fmt.Errorf("fetching granted permissions: %w", err)
+	}
+	return granted, nil
+}

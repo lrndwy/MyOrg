@@ -218,7 +218,21 @@ func (h *UploadHandler) Create(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
+	userID := ""
+	if uid, ok := c.Get("user_id"); ok {
+		if s, ok := uid.(string); ok {
+			userID = s
+		}
+	}
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": gin.H{
+				"code":    "UNAUTHORIZED",
+				"message": "Authentication required",
+			},
+		})
+		return
+	}
 
 	upload := models.Upload{
 		Filename:     filename,
@@ -227,7 +241,7 @@ func (h *UploadHandler) Create(c *gin.Context) {
 		Size:         header.Size,
 		Path:         key,
 		URL:          h.Storage.GetURL(key),
-		UserID:       userID.(string),
+		UserID:       userID,
 	}
 
 	if err := h.DB.Create(&upload).Error; err != nil {
@@ -494,7 +508,18 @@ func (h *UploadHandler) CompleteUpload(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
+	userID := ""
+	if uid, ok := c.Get("user_id"); ok {
+		if s, ok := uid.(string); ok {
+			userID = s
+		}
+	}
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": gin.H{"code": "UNAUTHORIZED", "message": "Authentication required"},
+		})
+		return
+	}
 
 	upload := models.Upload{
 		Filename:     filepath.Base(req.Key),
@@ -503,7 +528,7 @@ func (h *UploadHandler) CompleteUpload(c *gin.Context) {
 		Size:         req.Size,
 		Path:         req.Key,
 		URL:          h.Storage.GetURL(req.Key),
-		UserID:       userID.(string),
+		UserID:       userID,
 	}
 
 	if err := h.DB.Create(&upload).Error; err != nil {

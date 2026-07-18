@@ -1,5 +1,6 @@
+import { divisionName, recruitmentTitle } from "@/lib/resource-cells";
+import { CustomAnswersCell } from "@/components/recruitment/custom-answers-cell";
 import { defineResource } from "@/lib/resource";
-import { divisionName, jsonPreview, recruitmentTitle } from "@/lib/resource-cells";
 
 export const recruitmentSubmissionResource = defineResource({
   name: "RecruitmentSubmission",
@@ -7,6 +8,7 @@ export const recruitmentSubmissionResource = defineResource({
   endpoint: "/api/recruitment_submissions",
   icon: "Database",
   label: { singular: "Recruitment Submission", plural: "Recruitment Submissions" },
+  viewPermission: "recruitment.manage",
   table: {
     columns: [
       // grit:cols:auto-start
@@ -25,7 +27,9 @@ export const recruitmentSubmissionResource = defineResource({
       {
         key: "custom_answers",
         label: "Custom Answers",
-        cell: (row) => jsonPreview(row.custom_answers),
+        cell: (row) => (
+          <CustomAnswersCell answers={row.custom_answers} variant="compact" />
+        ),
       },
       {
         key: "status",
@@ -33,14 +37,15 @@ export const recruitmentSubmissionResource = defineResource({
         sortable: true,
         format: "badge",
         badge: {
+          pending: { color: "warning", label: "Pending" },
           submitted: { color: "info", label: "Submitted" },
           interview: { color: "warning", label: "Interview" },
           accepted: { color: "success", label: "Accepted" },
+          approved: { color: "success", label: "Approved" },
           rejected: { color: "danger", label: "Rejected" },
         },
       },
       { key: "created_at", label: "Created", sortable: true, format: "relative" },
-      { key: "nim", label: "Nim", sortable: true, searchable: true },
       // grit:cols:auto-end
     ],
     filters: [
@@ -49,6 +54,7 @@ export const recruitmentSubmissionResource = defineResource({
         label: "Status",
         type: "select",
         options: [
+          { label: "Pending", value: "pending" },
           { label: "Submitted", value: "submitted" },
           { label: "Interview", value: "interview" },
           { label: "Accepted", value: "accepted" },
@@ -61,6 +67,7 @@ export const recruitmentSubmissionResource = defineResource({
     pageSize: 20,
   },
   form: {
+    layout: "two-column",
     fields: [
       // grit:fields:auto-start
       {
@@ -84,23 +91,23 @@ export const recruitmentSubmissionResource = defineResource({
       {
         key: "custom_answers",
         label: "Custom Answers",
-        type: "textarea",
-        description: "JSON object of custom field answers",
+        type: "recruitment-custom-answers",
+        colSpan: 2,
       },
       {
         key: "status",
         label: "Status",
         type: "select",
         required: true,
-        defaultValue: "submitted",
+        defaultValue: "pending",
         options: [
+          { label: "Pending", value: "pending" },
           { label: "Submitted", value: "submitted" },
           { label: "Interview", value: "interview" },
           { label: "Accepted", value: "accepted" },
           { label: "Rejected", value: "rejected" },
         ],
       },
-      { key: "nim", label: "Nim", type: "text" },
       // grit:fields:auto-end
     ],
   },

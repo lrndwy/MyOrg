@@ -7,6 +7,7 @@ export const permissionRequestResource = defineResource({
   endpoint: "/api/permission_requests",
   icon: "Lock",
   label: { singular: "Permission Request", plural: "Permission Requests" },
+  viewPermission: "attendance.approve",
   table: {
     columns: [
       // grit:cols:auto-start

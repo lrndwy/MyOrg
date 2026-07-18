@@ -17,11 +17,17 @@ func SeedMyOrg(db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("admin role: %w", err)
 	}
+	if err := seedBendaharaAppRole(db); err != nil {
+		return fmt.Errorf("bendahara role: %w", err)
+	}
 	if err := seedOrganizationSetting(db); err != nil {
 		return fmt.Errorf("org settings: %w", err)
 	}
 	if err := seedLetterCategories(db); err != nil {
 		return fmt.Errorf("letter categories: %w", err)
+	}
+	if err := seedFinanceCategories(db); err != nil {
+		return fmt.Errorf("finance categories: %w", err)
 	}
 	divisionID, err := seedDemoDivision(db)
 	if err != nil {
@@ -49,6 +55,11 @@ func seedPermissions(db *gorm.DB) error {
 		{Code: "events.create", Module: "events", Description: "Create events"},
 		{Code: "events.edit", Module: "events", Description: "Edit events"},
 		{Code: "events.delete", Module: "events", Description: "Delete events"},
+		{Code: "events.committee.manage", Module: "events", Description: "Manage event committee (Sie & members)"},
+		{Code: "events.sub_events.view", Module: "events", Description: "View sub-events"},
+		{Code: "events.sub_events.manage", Module: "events", Description: "Manage sub-events and minutes"},
+		{Code: "sub_events.attendance.submit", Module: "events", Description: "Submit sub-event selfie attendance"},
+		{Code: "sub_events.attendance.manage", Module: "events", Description: "Manage sub-event manual attendance"},
 		{Code: "attendance.submit", Module: "attendance", Description: "Submit attendance"},
 		{Code: "attendance.approve", Module: "attendance", Description: "Approve permission requests"},
 		{Code: "divisions.view", Module: "divisions", Description: "View divisions"},
@@ -62,6 +73,12 @@ func seedPermissions(db *gorm.DB) error {
 		{Code: "letters.view", Module: "letters", Description: "View letters"},
 		{Code: "letters.manage", Module: "letters", Description: "Manage letters"},
 		{Code: "announcement.create", Module: "announcement", Description: "Create announcements"},
+		{Code: "finance.view", Module: "finance", Description: "Lihat laporan keuangan, transaksi, dan dashboard"},
+		{Code: "finance.create", Module: "finance", Description: "Catat pemasukan dan pengeluaran"},
+		{Code: "finance.edit", Module: "finance", Description: "Ubah transaksi keuangan"},
+		{Code: "finance.delete", Module: "finance", Description: "Hapus transaksi keuangan"},
+		{Code: "finance.categories", Module: "finance", Description: "Kelola kategori pemasukan/pengeluaran"},
+		{Code: "finance.manage", Module: "finance", Description: "Akses penuh modul keuangan (semua aksi tulis)"},
 	}
 
 	for _, p := range perms {
@@ -113,6 +130,49 @@ func seedAdminAppRole(db *gorm.DB) (string, error) {
 	return role.ID, nil
 }
 
+func seedBendaharaAppRole(db *gorm.DB) error {
+	var role models.Role
+	err := db.Where("name = ?", "Bendahara").First(&role).Error
+	if err == gorm.ErrRecordNotFound {
+		role = models.Role{
+			Name:        "Bendahara",
+			Description: "Bendahara organisasi — catat dan pantau keuangan",
+			IsSystem:    true,
+		}
+		if err := db.Create(&role).Error; err != nil {
+			return err
+		}
+		log.Println("Seeded App Role: Bendahara")
+	} else if err != nil {
+		return err
+	}
+
+	codes := []string{
+		"finance.view",
+		"finance.create",
+		"finance.edit",
+		"finance.delete",
+		"finance.categories",
+		"finance.manage",
+	}
+	var perms []models.Permission
+	if err := db.Where("code IN ?", codes).Find(&perms).Error; err != nil {
+		return err
+	}
+	for _, p := range perms {
+		var count int64
+		db.Model(&models.RolePermission{}).Where("role_id = ? AND permission_id = ?", role.ID, p.ID).Count(&count)
+		if count > 0 {
+			continue
+		}
+		rp := models.RolePermission{RoleID: role.ID, PermissionID: p.ID}
+		if err := db.Create(&rp).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func seedOrganizationSetting(db *gorm.DB) error {
 	var count int64
 	db.Model(&models.OrganizationSetting{}).Count(&count)
@@ -136,6 +196,7 @@ func seedLetterCategories(db *gorm.DB) error {
 	cats := []models.LetterCategory{
 		{Name: "Undangan", Code: "UND", StartNumber: 1, CurrentNumber: 0, NumberFormatTemplate: "{number}/{code}/{month_roman}/{year}"},
 		{Name: "Surat Keputusan", Code: "SK", StartNumber: 1, CurrentNumber: 0, NumberFormatTemplate: "{number}/{code}/{month_roman}/{year}"},
+		{Name: "Surat Masuk", Code: "SM-IN", StartNumber: 0, CurrentNumber: 0, NumberFormatTemplate: "{number}"},
 	}
 	for _, c := range cats {
 		var count int64
@@ -147,6 +208,30 @@ func seedLetterCategories(db *gorm.DB) error {
 			return err
 		}
 		log.Printf("Seeded letter category: %s", c.Code)
+	}
+	return nil
+}
+
+func seedFinanceCategories(db *gorm.DB) error {
+	cats := []models.FinanceCategory{
+		{Name: "Iuran Anggota", Type: "income", Description: "Pemasukan dari iuran rutin anggota"},
+		{Name: "Donasi", Type: "income", Description: "Pemasukan donasi/sponsorship"},
+		{Name: "Pemasukan Lainnya", Type: "income", Description: "Pemasukan di luar kategori utama"},
+		{Name: "Operasional", Type: "expense", Description: "Biaya operasional kegiatan"},
+		{Name: "Konsumsi", Type: "expense", Description: "Biaya makan/minum kegiatan"},
+		{Name: "Transport", Type: "expense", Description: "Biaya transportasi"},
+		{Name: "Pengeluaran Lainnya", Type: "expense", Description: "Pengeluaran di luar kategori utama"},
+	}
+	for _, c := range cats {
+		var count int64
+		db.Model(&models.FinanceCategory{}).Where("name = ? AND type = ?", c.Name, c.Type).Count(&count)
+		if count > 0 {
+			continue
+		}
+		if err := db.Create(&c).Error; err != nil {
+			return err
+		}
+		log.Printf("Seeded finance category: %s (%s)", c.Name, c.Type)
 	}
 	return nil
 }

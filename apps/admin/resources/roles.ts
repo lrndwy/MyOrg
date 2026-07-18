@@ -6,6 +6,7 @@ export const roleResource = defineResource({
   endpoint: "/api/roles",
   icon: "Shield",
   label: { singular: "Role", plural: "Roles" },
+  viewPermission: "roles.view",
   table: {
     columns: [
       // grit:cols:auto-start

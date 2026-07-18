@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/chrome/PageHeader";
+import { PermissionGate } from "@/components/auth/permission-gate";
 import { useToastedMutation } from "@/hooks/use-toasted-mutation";
 import { apiClient } from "@/lib/api-client";
 import { formatDate, formatRelative } from "@/lib/formatters";
@@ -21,9 +22,15 @@ const TABS: { key: StatusTab; label: string }[] = [
 ];
 
 function userLabel(u?: PermissionRequest["user"]): string {
-  if (!u) return "Unknown user";
-  const full = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
-  return u.full_name || full || u.email || "Unknown user";
+  if (!u || typeof u !== "object") return "Unknown user";
+  const user = u as {
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    email?: string;
+  };
+  const full = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+  return user.full_name || full || user.email || "Unknown user";
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -114,6 +121,14 @@ function ReviewModal({
 }
 
 export default function MyOrgPermissionApprovalsPage() {
+  return (
+    <PermissionGate permission="attendance.approve">
+      <MyOrgPermissionApprovalsPageContent />
+    </PermissionGate>
+  );
+}
+
+function MyOrgPermissionApprovalsPageContent() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<StatusTab>("pending");
   const [reviewing, setReviewing] = useState<{ id: string; action: "approve" | "reject" } | null>(null);
@@ -219,7 +234,9 @@ export default function MyOrgPermissionApprovalsPage() {
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r.id} className="border-b border-border last:border-0 align-top">
-                    <td className="px-4 py-3 text-foreground">{r.event?.title ?? "—"}</td>
+                    <td className="px-4 py-3 text-foreground">
+                      {(r.event as { title?: string } | null)?.title ?? "—"}
+                    </td>
                     <td className="px-4 py-3 text-foreground">{userLabel(r.user)}</td>
                     <td className="px-4 py-3 max-w-xs text-text-secondary">
                       <p className="line-clamp-2">{r.reason || "—"}</p>

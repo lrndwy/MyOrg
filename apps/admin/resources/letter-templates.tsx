@@ -6,6 +6,7 @@ export const letterTemplateResource = defineResource({
   endpoint: "/api/letter_templates",
   icon: "LayoutTemplate",
   label: { singular: "Letter Template", plural: "Letter Templates" },
+  viewPermission: "letters.view",
   table: {
     columns: [
       // grit:cols:auto-start

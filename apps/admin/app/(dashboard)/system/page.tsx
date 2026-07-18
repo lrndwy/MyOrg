@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/chrome/PageHeader";
 import {
   Activity, Bell, Calendar, Database, FileText, Mail,
-  MessageSquare, Shield, TrendingUp, Upload, Link as LinkIcon,
+  Shield, TrendingUp, Upload, Link as LinkIcon,
 } from "@/lib/icons";
 
 interface SystemTile {
@@ -24,7 +24,6 @@ const TILES: SystemTile[] = [
   { href: "/system/mail",          title: "Mail Preview",     description: "Email template gallery + recent send log.",                                 icon: <Mail className="h-5 w-5" /> },
   { href: "/system/observability", title: "Observability",    description: "Pulse summary — latency, SLOs, top N+1, runtime.",                          icon: <TrendingUp className="h-5 w-5" /> },
   { href: "/system/activity",      title: "User Activity",    description: "Auth events, writes, operator actions with IP + severity.",                 icon: <Activity className="h-5 w-5" /> },
-  { href: "/system/support",       title: "Support",          description: "Incoming tickets, threads, assignments, closures.",                         icon: <MessageSquare className="h-5 w-5" /> },
   { href: "/system/notifications", title: "Notifications",    description: "Recent system + Sentinel + Pulse notifications.",                           icon: <Bell className="h-5 w-5" /> },
   // v3.31.41 — public form sharing (FormShare table). Page existed
   // since v3.31.20 but wasn't linked from the Hub.

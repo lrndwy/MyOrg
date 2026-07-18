@@ -62,6 +62,31 @@ grit generate resource Event --fields "title:string,description:text,division:be
 ```
 `division` nullable = General event (lihat PRD §3.1).
 
+**Patch manual pasca-generate** (Event Kepanitiaan):
+- `event_type`: `general` | `kepanitiaan` (default `general`)
+- `committee_description`: text opsional
+
+### 2.5.1 Event Kepanitiaan (Sie, Sub Event, Absensi Sub Event)
+
+```bash
+grit generate resource EventCommitteeSie --fields "event:belongs_to:Event,name:string,description:text:optional,orderIndex:int"
+grit generate resource EventCommitteeMember --fields "sie:belongs_to:EventCommitteeSie,user:belongs_to:User,role:string"
+grit generate resource EventSubEvent --fields "event:belongs_to:Event,sie:belongs_to:EventCommitteeSie:optional,title:string,description:text:optional,location:string,startTime:datetime,endTime:datetime,ketuaPelaksana:belongs_to:User,attendanceMode:string,minutesUrl:string:optional,status:string"
+grit generate resource SubEventAttendance --fields "subEvent:belongs_to:EventSubEvent,user:belongs_to:User,status:string,selfieUrl:string:optional,signatureUrl:string:optional,checkedInAt:datetime:optional,markedBy:belongs_to:User:optional"
+```
+
+- **Sie** = unit kerja kepanitiaan per event (bukan `Division` organisasi).
+- **`event_committee_members.role`:** `ketua_sie` | `anggota`; unique index `(sie_id, user_id)` manual.
+- **`event_sub_events.attendance_mode`:** `selfie` | `manual`; `minutes_url` = notulensi rapat.
+- **`sub_event_attendances`:** unique index `(sub_event_id, user_id)` manual.
+- Hanya event `event_type = kepanitiaan` yang boleh punya Sie/Sub Event (validasi service).
+
+**Permission tambahan:** `events.committee.manage`, `events.sub_events.view`, `events.sub_events.manage`, `sub_events.attendance.submit`, `sub_events.attendance.manage`.
+
+**Endpoint kustom:** lihat §3.1 (committee overview, sub-event recap, absensi, upload notulensi).
+
+**Cron:** `sub_event_status_cron.go` — transisi `upcoming → ongoing → finished` untuk Sub Event.
+
 ### 2.6 Attendance
 ```bash
 grit generate resource Attendance --fields "event:belongs_to:Event,user:belongs_to:User,status:string,selfieUrl:string:optional,signatureUrl:string:optional,checkedInAt:datetime:optional"
@@ -101,7 +126,7 @@ grit generate resource Letter --fields "type:string,category:belongs_to:LetterCa
 
 **Outgoing:** pilih template → isi variabel (termasuk `{NOMOR_SURAT}` suggested dari counter kategori, bisa di-override) → merge → `document_url`. File bisa di-update setelah create.
 
-**Incoming:** category + upload file → `document_url`.
+**Incoming:** form admin hanya **Subject** + **upload file** (`.docx`, PDF, atau gambar). Kategori internal `SM-IN` (Surat Masuk) di-assign otomatis — **bukan** counter nomor kategori outgoing. `letter_code` diisi otomatis dengan hasil scan/parse teks file (`POST /api/letters/parse-incoming` untuk preview; create menjalankan parsing yang sama). **PDF digital** (text layer) dibaca langsung; **PDF hasil scan fisik** (hanya gambar) difallback ke OCR: Tesseract pada file/halaman PDF (`pdftoppm` dari poppler jika perlu konversi halaman). Gambar membutuhkan **tesseract** (binary di container API, atau `TESSERACT_HTTP_URL` → service `ocr` di docker compose dev).
 
 **Placeholder:** `{TEMPAT_TANGGAL_SURAT_DIBUAT}`, `{NOMOR_SURAT}`, `{LEMBAR_LAMPIRAN}`, `{EJA_LEMBAR_LAMPIRAN}`, `{TUJUAN_INSTANSI}`, `{NAMA_KEGIATAN}`, `{NAMA_ORGANISASI}`, `{NAMA_LENGKAP_JURI_INTERNAL}`, `{HARI_TANGGAL_KEGIATAN}`, `{WAKTU_MULAI_SELESAI_KEGIATAN}`, `{TEMPAT_KEGIATAN}`, `{GENDER_HORMAT}`, `{MATA_LOMBA}`, `{PEMBINA_DARI}`, `{KETUA_DARI}`, `{NAMA_PEMBINA}`, `{NIP_PEMBINA}`, `{NAMA_KETUA}`, `{NIM_KETUA}`, `{JUMLAH_ATAU_NAMA_ORANG}`, `{DIUNDANG_SEBAGAI}`, `{ALASAN_SPESIFIK_PENGAJUAN}`, `{NAMA_NARSUM_LENGKAP_JABATAN_INSTANSI}`, `{NAMA_JURI_EXTERNAL_LENGKAP_JABATAN_INSTANSI}`, `{NAMA_JURI_INTERNAL_LENGKAP_JABATAN_INSTANSI}`, `{MATERI}`. Alias legacy: `{NOMOR}` / `{LETTER_CODE}` ↔ `{NOMOR_SURAT}`.
 
@@ -112,6 +137,18 @@ grit generate resource AnnouncementAttachment --fields "announcement:belongs_to:
 ```
 
 **UI:** Announcement Attachments **tidak** punya menu admin terpisah. Attachment diunggah inline di form Create/Edit Announcement (`type: files`, multi). API tetap punya CRUD `/api/announcement_attachments` bila diperlukan; create/update announcement menerima nested `attachments[]` (FileRef atau `{file_url,file_type}`). List/Get announcement mem-preload `attachments`.
+
+### 2.12 Keuangan (Bendahara)
+```bash
+grit generate resource FinanceCategory --fields "name:string,type:string,description:text:optional"
+grit generate resource FinanceTransaction --fields "type:string,amount:float,description:text,proofUrl:string:optional,transactionDate:date,category:belongs_to:FinanceCategory,recordedBy:belongs_to:User:optional"
+```
+
+- **`finance_categories.type`:** `income` (pemasukan) | `expense` (pengeluaran).
+- **`finance_transactions`:** ledger — `amount`, `description`, `proof_url`, `transaction_date`, kategori. `recorded_by` otomatis dari user login.
+- **Permission:** `finance.view`, `finance.create`, `finance.edit`, `finance.delete`, `finance.categories`, `finance.manage` (akses penuh tulis).
+- **Admin UI:** `/myorg/finance` (stat cards, grafik arus kas, breakdown kategori, detail cashflow, update terbaru); kategori di `/resources/finance-categories`.
+- **API:** `GET /api/finance_transactions/summary` → `{ total_income, total_expense, balance }`; `GET /api/finance_transactions/dashboard?days=30` → agregat all-time / minggu ini / bulan ini, series cashflow harian, breakdown kategori, `recent_updates`.
 
 Setelah semua resource digenerate: jalankan `grit sync` sekali lagi untuk memastikan seluruh Zod schema & TS types di `packages/shared` konsisten.
 
@@ -130,6 +167,12 @@ Beberapa endpoint di PRD §5 bersifat publik (recruitment form, branding setting
 | `PUT /settings` | `settings.manage` | Multipart logo/icon |
 | `GET /me`, `PUT /me`, `PUT /me/password` | JWT | Profile user |
 | `GET /events/:id/recap` | `events.view` | Aggregasi kehadiran + export |
+| `GET /events/:id/committee` | `events.view` | Overview kepanitiaan (Sie, anggota, Sub Event) |
+| `GET /events/:id/sub-events` | `events.sub_events.view` | List Sub Event (filter sie) |
+| `GET /sub_events/:id/recap` | `events.sub_events.view` | Rekap absensi Sub Event |
+| `POST /sub_events/:id/attendance` | `sub_events.attendance.submit` | Selfie check-in Sub Event |
+| `PUT /sub_events/:id/attendance/:userId` | `sub_events.attendance.manage` | Tandai hadir manual |
+| `POST /sub_events/:id/minutes` | `events.sub_events.manage` | Upload notulensi Sub Event |
 | `POST /events/:id/attendance` | `attendance.submit` | Selfie + signature |
 | `GET/PUT /attendance/permission-requests/*` | `attendance.approve` | Approval flow |
 | `POST /permission-requests`, `GET /permission-requests/me` | `permission.submit` | Ajukan & riwayat izin |
@@ -165,7 +208,7 @@ events.POST("", RequirePermission("events.create"), eventHandler.Create)
 attendance.PUT("/permission-requests/:id", RequirePermission("attendance.approve"), attendanceHandler.ReviewPermission)
 ```
 
-Daftar awal permission code mengikuti modul PRD: `settings.manage`, `users.view/create/edit/delete/import`, `roles.view/create/edit/delete`, `events.view/create/edit/delete`, `attendance.submit/approve`, `divisions.view/create/edit/delete`, `permission.submit`, `violations.view/manage`, `recruitment.manage`, `letters.view/manage`, `announcement.create`. Seed awal ada di `grit seed` (lihat §6).
+Daftar awal permission code mengikuti modul PRD: `settings.manage`, `users.view/create/edit/delete/import`, `roles.view/create/edit/delete`, `events.view/create/edit/delete`, `events.committee.manage`, `events.sub_events.view`, `events.sub_events.manage`, `sub_events.attendance.submit`, `sub_events.attendance.manage`, `attendance.submit/approve`, `divisions.view/create/edit/delete`, `permission.submit`, `violations.view/manage`, `recruitment.manage`, `letters.view/manage`, `announcement.create`, `finance.view/create/edit/delete/categories/manage`. Seed awal ada di `grit seed` (lihat §6). Role sistem **Bendahara** otomatis mendapat semua permission modul `finance.*`.
 
 ## 5. Business Logic Kunci (di Service Layer)
 
@@ -186,7 +229,7 @@ Diregistrasi di `apps/api/internal/jobs/event_status_cron.go`.
 Service `LetterService.Create` (outgoing dari `LetterTemplate`):
 1. Ambil `LetterTemplate` + kategori-nya (`category_id` dari template).
 2. Lock row `letter_categories`; hitung nomor berikutnya dari `current_number` / `start_number`.
-3. Render `number_format_template` → nilai default `{NOMOR_SURAT}` / `letter_code`. Jika user mengisi override `variables.NOMOR_SURAT` (atau `letter_code`), pakai nilai itu; counter tetap di-increment.
+3. Render `number_format_template` → nilai default `{NOMOR_SURAT}` / `letter_code`. Placeholder template: `{number}`, `{number_padded}`, `{number_padded_2}`, `{number_padded_4}`, `{code}`, `{name}`, `{year}`, `{year_short}`, `{month}`, `{month_padded}`, `{month_roman}`, `{month_name}`, `{day}`, `{day_padded}`, `{date}`, `{date_id}`, `{weekday}`, `{weekday_short}` plus alias Indonesia (`{nomor}`, `{kategori}`, `{nama_kategori}`, `{tahun}`, `{bulan}`, `{bulan_romawi}`, `{bulan_nama}`, `{hari}`, `{tanggal}`, `{hari_nama}`, dll.). Jika user mengisi override `variables.NOMOR_SURAT` (atau `letter_code`), pakai nilai itu; counter tetap di-increment.
 4. Simpan letter + `variable_values` (JSON map placeholder → teks).
 5. Unduh `.docx` dari `letter_templates.template_url`, `letterdoc.DetectVariables` + `Merge` dengan map variabel user, upload ke `letters/{id}/generated.docx`, set `document_url`.
 6. **Incoming:** set `document_url` dari upload (tanpa merge).
@@ -195,7 +238,15 @@ Service `LetterService.Create` (outgoing dari `LetterTemplate`):
 `GET /api/letters/:id/download` mengarahkan ke `document_url`.
 `GET /api/letter_templates/:id/variables` → `{ variables: ["NOMOR_SURAT", ...] }`.
 
-### 5.4 Notifikasi
+### 5.4 Role Permission Matrix (bulk grant/revoke)
+Admin panel `Role Permissions` punya dua tampilan: **Matrix** (default) dan **Tabel** (CRUD generate biasa). Matrix memanggil dua endpoint custom di `RolePermissionHandler` (bukan hasil generator, didaftarkan di `grit:routes:custom`):
+- `GET /api/roles/:id/permissions` → `RolePermissionService.PermissionsMatrixForRole`: semua `permissions` (urut module/code) + `assigned_ids` untuk role tsb.
+- `PUT /api/roles/:id/permissions` (body `{permission_ids: []}`) → `RolePermissionService.SyncPermissionsForRole`: **replace-all** dalam satu transaction (hapus seluruh `role_permissions` milik role, insert ulang set baru) — pola yang sama dengan `AnnouncementService.ReplaceAttachments`. Dipilih dibanding diff add/remove karena idempotent & lebih sederhana untuk relasi many-to-many kecil ini.
+Digate dengan permission code `roles.edit` (bukan role string), Grit base Role `ADMIN` bypass seperti middleware `RequirePermission` lain.
+
+**Admin panel UI gating** (`apps/admin`): sidebar, Quick Access, dan halaman resource/MyOrg memfilter menu berdasarkan permission code dari `GET /api/me/permissions` (AppRole user). Setiap resource mendeklarasikan `viewPermission` di `apps/admin/resources/*.ts`. Grit base Role `ADMIN` menerima semua code (`is_grit_admin: true`); `EDITOR` hanya melihat fitur sesuai AppRole-nya. Gate panel tetap `ADMIN`/`EDITOR` — `USER` tidak masuk admin app.
+
+### 5.5 Notifikasi
 Pakai `asynq` job async agar request utama tetap cepat:
 - Hasil import user → email berisi kredensial (opsional, bisa dimatikan via settings).
 - Approval/rejection perizinan → notifikasi in-app + email ke user pengaju.
@@ -213,7 +264,7 @@ Pakai `asynq` job async agar request utama tetap cepat:
 
 Model `PushSubscription`: `user_id`, `endpoint` (unique), `p256dh`, `auth`.
 
-### 5.5 Visibility Divisi
+### 5.6 Visibility Divisi
 Query event & data lain memakai filter di service layer:
 ```
 if !user.role.HasPermission("events.view_all") && !settings.AllowCrossDivisionEventsView {
@@ -221,10 +272,10 @@ if !user.role.HasPermission("events.view_all") && !settings.AllowCrossDivisionEv
 }
 ```
 
-### 5.6 Organization Settings Singleton
+### 5.7 Organization Settings Singleton
 `OrganizationSettingService` enforce max 1 row (create kedua ditolak; update selalu ke row yang ada).
 
-### 5.7 User Import
+### 5.8 User Import
 `UserImportService`: parse CSV/XLSX, validasi baris, bulk insert, kirim kredensial via asynq email.
 
 ## 6. Seed Data (`grit seed`)

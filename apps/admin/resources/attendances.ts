@@ -7,6 +7,7 @@ export const attendanceResource = defineResource({
   endpoint: "/api/attendances",
   icon: "Database",
   label: { singular: "Attendance", plural: "Attendances" },
+  viewPermission: "events.view",
   table: {
     columns: [
       // grit:cols:auto-start

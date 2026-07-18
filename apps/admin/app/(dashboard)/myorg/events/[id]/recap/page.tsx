@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/chrome/PageHeader";
+import { PermissionGate } from "@/components/auth/permission-gate";
 import { IconButton } from "@/components/ui/IconButton";
 import { apiClient } from "@/lib/api-client";
 import { formatDate } from "@/lib/formatters";
@@ -24,9 +25,15 @@ interface RecapResponse {
 }
 
 function userLabel(u?: Attendance["user"]): string {
-  if (!u) return "Unknown user";
-  const full = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
-  return u.full_name || full || u.email || "Unknown user";
+  if (!u || typeof u !== "object") return "Unknown user";
+  const user = u as {
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    email?: string;
+  };
+  const full = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+  return user.full_name || full || user.email || "Unknown user";
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -65,6 +72,14 @@ function SummaryCard({
 }
 
 export default function EventRecapPage() {
+  return (
+    <PermissionGate permission="events.view">
+      <EventRecapPageContent />
+    </PermissionGate>
+  );
+}
+
+function EventRecapPageContent() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
 

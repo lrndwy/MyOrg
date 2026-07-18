@@ -7,6 +7,7 @@ export const announcementResource = defineResource({
   endpoint: "/api/announcements",
   icon: "Database",
   label: { singular: "Announcement", plural: "Announcements" },
+  viewPermission: "announcement.create",
   table: {
     columns: [
       // grit:cols:auto-start

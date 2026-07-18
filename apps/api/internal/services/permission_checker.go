@@ -36,6 +36,20 @@ func (c *PermissionChecker) UserHasPermission(appRoleID *string, code string) (b
 	return count > 0, nil
 }
 
+// UserHasAnyPermission returns true when the role has at least one of the codes.
+func (c *PermissionChecker) UserHasAnyPermission(appRoleID *string, codes ...string) (bool, error) {
+	for _, code := range codes {
+		ok, err := c.UserHasPermission(appRoleID, code)
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ListCodesForRole returns all permission codes granted to an app role.
 func (c *PermissionChecker) ListCodesForRole(appRoleID *string) ([]string, error) {
 	if c.DB == nil {

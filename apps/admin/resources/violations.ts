@@ -7,6 +7,7 @@ export const violationResource = defineResource({
   endpoint: "/api/violations",
   icon: "Database",
   label: { singular: "Violation", plural: "Violations" },
+  viewPermission: "violations.view",
   table: {
     columns: [
       // grit:cols:auto-start
@@ -74,7 +75,16 @@ export const violationResource = defineResource({
           { label: "SP3", value: "SP3" },
         ],
       },
-      { key: "document_url", label: "Document", type: "text", description: "URL lampiran dokumen" },
+      {
+        key: "document_url",
+        label: "Document",
+        type: "relationship-select",
+        relatedEndpoint: "/api/letters?page_size=200&sort_by=created_at&sort_order=desc",
+        displayFields: ["letter_code", "subject"],
+        valueField: "document_url",
+        placeholder: "Pilih surat...",
+        description: "Lampiran dokumen SP dari surat yang sudah terdaftar",
+      },
       {
         key: "issued_by_id",
         label: "Issued By",

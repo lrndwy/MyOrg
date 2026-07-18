@@ -19,6 +19,8 @@ type Event struct {
 	StartTime *time.Time `json:"start_time"`
 	EndTime *time.Time `json:"end_time"`
 	AllowPermission bool `json:"allow_permission"`
+	EventType string `gorm:"size:32;not null;default:general" json:"event_type" binding:"required"`
+	CommitteeDescription string `gorm:"type:text" json:"committee_description"`
 	Status string `gorm:"size:255" json:"status" binding:"required"`
 	Version   int            `gorm:"not null;default:1" json:"version"`
 	CreatedAt time.Time      `json:"created_at"`

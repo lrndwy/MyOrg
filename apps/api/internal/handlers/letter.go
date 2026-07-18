@@ -255,6 +255,47 @@ func (h *LetterHandler) Create(c *gin.Context) {
 	})
 }
 
+// ParseIncoming scans an uploaded incoming letter file and returns detected nomor surat.
+func (h *LetterHandler) ParseIncoming(c *gin.Context) {
+	var req struct {
+		DocumentUrl string `json:"document_url" binding:"required"`
+		FileName    string `json:"file_name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": gin.H{
+				"code":    "VALIDATION_ERROR",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+
+	svc := h.Letters
+	if svc == nil {
+		svc = &services.LetterService{DB: h.DB}
+	}
+
+	preview, err := svc.ParseIncomingPreview(req.DocumentUrl, req.FileName)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": gin.H{
+				"code":    "LETTER_PARSE_ERROR",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"letter_code":    preview.LetterCode,
+			"extracted_text": preview.ExtractedText,
+			"detected":       strings.TrimSpace(preview.LetterCode) != "",
+		},
+	})
+}
+
 // Download redirects to the letter's document_url.
 func (h *LetterHandler) Download(c *gin.Context) {
 	id := c.Param("id")
@@ -405,6 +446,7 @@ func (h *LetterHandler) Patch(c *gin.Context) {
 		"recipient":       true,
 		"document_url":    true,
 		"variable_values": true,
+		"file_name":       true, // incoming re-parse hint only (not a DB column)
 	}
 	updates := map[string]interface{}{}
 	for k, v := range body {
@@ -444,21 +486,31 @@ func (h *LetterHandler) Patch(c *gin.Context) {
 		return
 	}
 
-	if err := h.DB.Model(&item).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
+	svc := h.Letters
+	if svc == nil {
+		svc = &services.LetterService{DB: h.DB}
+	}
+	updated, err := svc.Update(id, updates)
+	if err != nil {
+		status := http.StatusBadRequest
+		code := "VALIDATION_ERROR"
+		if strings.Contains(err.Error(), "nomor surat") || strings.Contains(err.Error(), "OCR") {
+			status = http.StatusUnprocessableEntity
+			code = "LETTER_PARSE_ERROR"
+		}
+		c.JSON(status, gin.H{
 			"error": gin.H{
-				"code":    "INTERNAL_ERROR",
-				"message": "Failed to patch letter",
+				"code":    code,
+				"message": err.Error(),
 			},
 		})
 		return
 	}
-	h.DB.Preload("Category").First(&item, "id = ?", item.ID)
 
-	services.LogUpdate(h.DB, c, "Letter", item.Subject, item.ID, services.DiffSummary(updates))
+	services.LogUpdate(h.DB, c, "Letter", updated.Subject, updated.ID, services.DiffSummary(updates))
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":    item,
+		"data":    updated,
 		"message": "Letter updated successfully",
 	})
 }

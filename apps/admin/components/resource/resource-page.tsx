@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, type ReactNode } from "react";
 import { useRouter, useSearchParams, usePathname, type ReadonlyURLSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { ResourceDefinition } from "@/lib/resource";
 import { useResource, useDeleteResource, useBulkDeleteResource } from "@/hooks/use-resource";
+import { PermissionGate } from "@/components/auth/permission-gate";
 import { PageHeader, type StatCard } from "@/components/layout/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { TableToolbar } from "@/components/tables/table-toolbar";
@@ -85,9 +86,16 @@ const ConfirmModal = dynamic(() =>
 const ImportModal = dynamic(() =>
   import("@/components/tables/import-modal").then((m) => m.ImportModal)
 );
+const SubmissionDetailsModal = dynamic(() =>
+  import("@/components/recruitment/submission-details-modal").then((m) => m.SubmissionDetailsModal)
+);
 
 interface ResourcePageProps {
   resource: ResourceDefinition;
+  /** Extra controls shown in the table toolbar (e.g. view mode toggle). */
+  toolbarExtra?: ReactNode;
+  /** Skip the built-in PageHeader (when the parent page already renders one). */
+  hideHeader?: boolean;
 }
 
 // v3.31.27: ResourcePage is now a thin router. It picks between four
@@ -97,32 +105,48 @@ interface ResourcePageProps {
 // early returns — meaning the hook count varied between renders. React 19
 // strict mode errors out on that mismatch. Splitting into two components
 // keeps each function's hook list stable.
-export function ResourcePage({ resource }: ResourcePageProps) {
+export function ResourcePage({ resource, toolbarExtra, hideHeader }: ResourcePageProps) {
   const searchParams = useSearchParams();
   const isFormPage = resource.formView === "page" || resource.formView === "page-steps";
   const isSteps = resource.formView === "modal-steps" || resource.formView === "page-steps";
   const formAction = searchParams.get("action");
 
-  // v3.31.18: editing + form has groups → render per-group cards with
-  // PATCH-per-group saves. Falls back to the standard FormPage when no
-  // groups are defined.
-  const editId = searchParams.get("edit");
-  const hasUpdateGroups = (resource.form.groups ?? []).some(
-    (g) => !g.scope || g.scope === "update" || g.scope === "both"
+  const content = (() => {
+    // v3.31.18: editing + form has groups → render per-group cards with
+    // PATCH-per-group saves. Falls back to the standard FormPage when no
+    // groups are defined.
+    const editId = searchParams.get("edit");
+    const hasUpdateGroups = (resource.form.groups ?? []).some(
+      (g) => !g.scope || g.scope === "update" || g.scope === "both"
+    );
+    if (isFormPage && formAction === "edit" && editId && hasUpdateGroups) {
+      return <UpdateGroups resource={resource} id={editId} />;
+    }
+
+    // If formView is "page" or "page-steps" and we have an action param, show the form page
+    if (isFormPage && (formAction === "create" || formAction === "edit")) {
+      return isSteps ? <FormPageSteps resource={resource} /> : <FormPage resource={resource} />;
+    }
+
+    return <ResourceListView resource={resource} toolbarExtra={toolbarExtra} hideHeader={hideHeader} />;
+  })();
+
+  const viewCodes = useMemo(() => {
+    const codes = [
+      ...(resource.viewPermissions ?? []),
+      ...(resource.viewPermission ? [resource.viewPermission] : []),
+    ];
+    return codes.length > 0 ? codes : undefined;
+  }, [resource.viewPermission, resource.viewPermissions]);
+
+  return (
+    <PermissionGate permissions={viewCodes}>
+      {content}
+    </PermissionGate>
   );
-  if (isFormPage && formAction === "edit" && editId && hasUpdateGroups) {
-    return <UpdateGroups resource={resource} id={editId} />;
-  }
-
-  // If formView is "page" or "page-steps" and we have an action param, show the form page
-  if (isFormPage && (formAction === "create" || formAction === "edit")) {
-    return isSteps ? <FormPageSteps resource={resource} /> : <FormPage resource={resource} />;
-  }
-
-  return <ResourceListView resource={resource} />;
 }
 
-function ResourceListView({ resource }: ResourcePageProps) {
+function ResourceListView({ resource, toolbarExtra, hideHeader }: ResourcePageProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -299,6 +323,8 @@ function ResourceListView({ resource }: ResourcePageProps) {
   }, []);
 
   const actions = resource.table.actions ?? ["create", "view", "edit", "delete"];
+  const bulkActions = resource.table.bulkActions ?? [];
+  const hasBulkDelete = bulkActions.includes("delete");
   const singularName = resource.label?.singular ?? resource.name;
   const pluralName = resource.label?.plural ?? resource.slug;
 
@@ -361,12 +387,14 @@ function ResourceListView({ resource }: ResourcePageProps) {
 
   return (
     <div>
-      <PageHeader
-        title={pluralName}
-        description={`Manage ${pluralName.toLowerCase()}`}
-        actions={headerActions}
-        stats={statsCards}
-      />
+      {!hideHeader && (
+        <PageHeader
+          title={pluralName}
+          description={`Manage ${pluralName.toLowerCase()}`}
+          actions={headerActions}
+          stats={statsCards}
+        />
+      )}
 
       <div className="rounded-xl border border-border bg-bg-secondary">
         <TableToolbar
@@ -374,7 +402,7 @@ function ResourceListView({ resource }: ResourcePageProps) {
           search={search}
           onSearch={handleSearch}
           selectedCount={selectedRows.length}
-          onBulkDelete={handleBulkDelete}
+          onBulkDelete={hasBulkDelete ? handleBulkDelete : undefined}
           onCreate={actions.includes("create") ? handleCreate : undefined}
           allColumns={resource.table.columns}
           hiddenColumns={hiddenColumns}
@@ -388,6 +416,7 @@ function ResourceListView({ resource }: ResourcePageProps) {
           onDateRangeChange={setDateRange}
           apiSearchParams={apiSearchParams}
           onImport={resource.table.import !== false ? () => setImportOpen(true) : undefined}
+          extra={toolbarExtra}
         />
 
         {resource.table.filters && resource.table.filters.length > 0 && (
@@ -406,7 +435,7 @@ function ResourceListView({ resource }: ResourcePageProps) {
           sortOrder={sortOrder}
           onSort={handleSort}
           selectedRows={selectedRows}
-          onSelectRows={setSelectedRows}
+          onSelectRows={bulkActions.length > 0 ? setSelectedRows : undefined}
           onView={actions.includes("view") ? handleView : undefined}
           onEdit={actions.includes("edit") ? handleEdit : undefined}
           onDelete={actions.includes("delete") ? handleDelete : undefined}
@@ -449,12 +478,35 @@ function ResourceListView({ resource }: ResourcePageProps) {
       )}
 
       {viewingItem && (
-        <ViewModal
-          resource={resource}
-          item={viewingItem}
-          onClose={() => setViewingItem(null)}
-          onEdit={actions.includes("edit") ? handleEdit : undefined}
-        />
+        resource.slug === "recruitment-submissions" ? (
+          <SubmissionDetailsModal
+            submission={viewingItem}
+            onClose={() => setViewingItem(null)}
+            onEdit={
+              actions.includes("edit")
+                ? (submission) => {
+                    setViewingItem(null);
+                    handleEdit(submission as unknown as Record<string, unknown>);
+                  }
+                : undefined
+            }
+            onDelete={
+              actions.includes("delete")
+                ? (submission) => {
+                    setViewingItem(null);
+                    handleDelete(String(submission.id));
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <ViewModal
+            resource={resource}
+            item={viewingItem}
+            onClose={() => setViewingItem(null)}
+            onEdit={actions.includes("edit") ? handleEdit : undefined}
+          />
+        )
       )}
 
       <ConfirmModal

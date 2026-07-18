@@ -1,4 +1,5 @@
 import { defineResource } from "@/lib/resource";
+import { permissionCode, permissionField, roleName } from "@/lib/resource-cells";
 
 export const rolePermissionResource = defineResource({
   name: "RolePermission",
@@ -6,13 +7,23 @@ export const rolePermissionResource = defineResource({
   endpoint: "/api/role_permissions",
   icon: "Shield",
   label: { singular: "Role Permission", plural: "Role Permissions" },
+  viewPermission: "roles.view",
   table: {
     columns: [
       // grit:cols:auto-start
-      { key: "role.name", label: "Role", searchable: true },
-      { key: "permission.code", label: "Permission", searchable: true },
-      { key: "permission.module", label: "Module" },
-      { key: "permission.description", label: "Description" },
+      { key: "role", label: "Role", cell: (row) => roleName(row), searchable: true },
+      {
+        key: "permission",
+        label: "Permission",
+        cell: (row) => permissionCode(row),
+        searchable: true,
+      },
+      { key: "permission_module", label: "Module", cell: (row) => permissionField(row, "module") },
+      {
+        key: "permission_description",
+        label: "Description",
+        cell: (row) => permissionField(row, "description"),
+      },
       { key: "created_at", label: "Created", sortable: true, format: "relative" },
       // grit:cols:auto-end
     ],

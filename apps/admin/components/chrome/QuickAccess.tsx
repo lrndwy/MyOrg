@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  LayoutGrid, X, Settings2, Trash2, Home, MessageSquare, Link as LinkIcon, getIcon,
+  LayoutGrid, X, Settings2, Trash2, Home, Link as LinkIcon, getIcon,
+  CreditCard,
 } from "@/lib/icons";
 import { resources } from "@/resources";
 import type { LucideIcon } from "lucide-react";
+import { canFinanceCreate, canViewResource, useMyPermissions } from "@/hooks/use-permissions-gate";
 
 type Corner = "bottom-left" | "bottom-center" | "bottom-right";
 
@@ -28,9 +30,6 @@ const NAV_ACTIONS: QuickAction[] = [
   { key: "nav:dashboard", label: "Dashboard", description: "Overview & metrics", icon: Home, to: "/dashboard" },
   { key: "nav:hub", label: "System Hub", description: "Jobs, files, security & more", icon: LayoutGrid, to: "/system" },
 ];
-const SYSTEM_ACTIONS: QuickAction[] = [
-  { key: "sys:ticket", label: "New ticket", description: "Open a support ticket", icon: MessageSquare, to: "/system/support" },
-];
 
 function cx(...c: (string | false | undefined)[]) { return c.filter(Boolean).join(" "); }
 
@@ -46,8 +45,36 @@ function loadConfig(): QuickConfig {
   return DEFAULT_CONFIG;
 }
 
-function resourceActions(): QuickAction[] {
-  return resources.map((r) => {
+const FINANCE_QUICK_ACTIONS: QuickAction[] = [
+  {
+    key: "finance:income",
+    label: "Pemasukan",
+    description: "Catat pemasukan organisasi",
+    icon: CreditCard,
+    to: "/myorg/finance?action=income",
+  },
+  {
+    key: "finance:expense",
+    label: "Pengeluaran",
+    description: "Catat pengeluaran organisasi",
+    icon: CreditCard,
+    to: "/myorg/finance?action=expense",
+  },
+];
+
+function financeQuickActions(permissionsData: ReturnType<typeof useMyPermissions>["data"]): QuickAction[] {
+  if (!canFinanceCreate(permissionsData)) return [];
+  return FINANCE_QUICK_ACTIONS;
+}
+
+function resourceActions(permissionsData: ReturnType<typeof useMyPermissions>["data"]): QuickAction[] {
+  return resources
+    .filter((r) => canViewResource(permissionsData, r))
+    .filter((r) => {
+      if (r.slug === "finance-transactions") return canFinanceCreate(permissionsData);
+      return true;
+    })
+    .map((r) => {
     const singular = r.label?.singular ?? r.name;
     return {
       key: "res:" + r.slug,
@@ -61,6 +88,7 @@ function resourceActions(): QuickAction[] {
 
 export function QuickAccess() {
   const router = useRouter();
+  const { data: permissionsData } = useMyPermissions();
   const [config, setConfig] = useState<QuickConfig>(DEFAULT_CONFIG);
   const [open, setOpen] = useState(false);
   const [configuring, setConfiguring] = useState(false);
@@ -77,7 +105,10 @@ export function QuickAccess() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   };
 
-  const allDefaults = useMemo(() => [...NAV_ACTIONS, ...resourceActions(), ...SYSTEM_ACTIONS], []);
+  const allDefaults = useMemo(
+    () => [...NAV_ACTIONS, ...financeQuickActions(permissionsData), ...resourceActions(permissionsData)],
+    [permissionsData]
+  );
   const visible = useMemo<QuickAction[]>(
     () => [
       ...allDefaults.filter((a) => !config.hidden.includes(a.key)),

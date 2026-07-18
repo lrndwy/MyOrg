@@ -7,6 +7,7 @@ export const recruitmentCustomFieldResource = defineResource({
   endpoint: "/api/recruitment_custom_fields",
   icon: "Database",
   label: { singular: "Recruitment Custom Field", plural: "Recruitment Custom Fields" },
+  viewPermission: "recruitment.manage",
   table: {
     columns: [
       // grit:cols:auto-start
@@ -76,7 +77,7 @@ export const recruitmentCustomFieldResource = defineResource({
         label: "Field Options",
         type: "textarea",
         description:
-          'Untuk tipe Select: satu opsi per baris (atau JSON ["A","B"]). Kosongkan jika bukan select.',
+          'Untuk tipe Select: satu opsi per baris. Untuk tipe File: tipe yang diizinkan (image, pdf, doc, excel, csv, video) — pisahkan koma. Kosongkan jika default.',
         placeholder: "Opsi 1\nOpsi 2\nOpsi 3",
         rows: 4,
       },

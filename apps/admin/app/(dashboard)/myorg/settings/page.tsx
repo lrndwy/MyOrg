@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/chrome/PageHeader";
+import { PermissionGate } from "@/components/auth/permission-gate";
 import { Dropzone, type UploadedFile } from "@/components/ui/dropzone";
 import { useToastedMutation } from "@/hooks/use-toasted-mutation";
 import { apiClient, uploadFile } from "@/lib/api-client";
@@ -119,6 +120,14 @@ function ToggleRow({
 }
 
 export default function MyOrgSettingsPage() {
+  return (
+    <PermissionGate permission="settings.manage">
+      <MyOrgSettingsPageContent />
+    </PermissionGate>
+  );
+}
+
+function MyOrgSettingsPageContent() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 

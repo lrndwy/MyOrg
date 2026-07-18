@@ -22,7 +22,7 @@ export function TextField({ field, value, onChange, error }: TextFieldProps) {
           </span>
         )}
         <input
-          type="text"
+          type={field.inputType ?? "text"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
@@ -36,7 +36,7 @@ export function TextField({ field, value, onChange, error }: TextFieldProps) {
       </div>
 
       {field.description && !error && (
-        <p className="text-xs text-text-muted">{field.description}</p>
+        <p className="text-xs text-text-muted whitespace-pre-line">{field.description}</p>
       )}
       {error && <p className="text-xs text-danger">{error}</p>}
     </div>

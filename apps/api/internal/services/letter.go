@@ -126,7 +126,7 @@ func (s *LetterService) PreviewNextLetterCode(categoryID string, letterDate *tim
 	if letterDate != nil {
 		t = *letterDate
 	}
-	return renderLetterCode(cat.NumberFormatTemplate, next, cat.Code, t), nil
+	return renderLetterCode(cat.NumberFormatTemplate, next, cat.Code, cat.Name, t), nil
 }
 
 // Create creates a letter (incoming or outgoing) with auto letter code.
@@ -169,17 +169,11 @@ func (s *LetterService) Create(input CreateLetterInput) (*models.Letter, error) 
 			}
 		}
 	} else {
-		if strings.TrimSpace(input.CategoryID) == "" {
-			return nil, fmt.Errorf("category_id is required")
-		}
 		if strings.TrimSpace(input.DocumentUrl) == "" {
 			return nil, fmt.Errorf("document file is required for incoming letters")
 		}
 		if strings.TrimSpace(input.Subject) == "" {
-			input.Subject = input.FileName
-			if input.Subject == "" {
-				input.Subject = "Surat Masuk"
-			}
+			return nil, fmt.Errorf("subject is required for incoming letters")
 		}
 	}
 
@@ -200,6 +194,41 @@ func (s *LetterService) Create(input CreateLetterInput) (*models.Letter, error) 
 	}
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if typ == "incoming" {
+			catID, err := s.resolveIncomingCategoryID(tx)
+			if err != nil {
+				return err
+			}
+			item.CategoryID = catID
+
+			docBytes, err := downloadBytes(item.DocumentUrl)
+			if err != nil {
+				return fmt.Errorf("mengunduh file surat masuk: %w", err)
+			}
+			override := strings.TrimSpace(input.LetterCode)
+			if override != "" {
+				item.LetterCode = override
+			} else {
+				parsedCode, err := letterdoc.ParseIncomingLetterNumber(docBytes, input.FileName)
+				if err != nil {
+					return err
+				}
+				item.LetterCode = parsedCode
+			}
+			if strings.TrimSpace(item.LetterCode) == "" {
+				return fmt.Errorf("nomor surat wajib diisi untuk surat masuk")
+			}
+			now := time.Now()
+			if item.LetterDate == nil {
+				item.LetterDate = &now
+			}
+
+			if err := tx.Create(item).Error; err != nil {
+				return fmt.Errorf("creating letter: %w", err)
+			}
+			return nil
+		}
+
 		var cat models.LetterCategory
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			First(&cat, "id = ?", item.CategoryID).Error; err != nil {
@@ -215,7 +244,7 @@ func (s *LetterService) Create(input CreateLetterInput) (*models.Letter, error) 
 		if item.LetterDate != nil {
 			letterDate = *item.LetterDate
 		}
-		autoCode := renderLetterCode(cat.NumberFormatTemplate, next, cat.Code, letterDate)
+		autoCode := renderLetterCode(cat.NumberFormatTemplate, next, cat.Code, cat.Name, letterDate)
 
 		override := strings.TrimSpace(input.LetterCode)
 		if override == "" && input.Variables != nil {
@@ -317,19 +346,114 @@ func downloadBytes(url string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(res.Body, 20<<20))
 }
 
-func renderLetterCode(tmpl string, number int, code string, t time.Time) string {
-	romans := []string{"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"}
+func renderLetterCode(tmpl string, number int, code, name string, t time.Time) string {
 	month := int(t.Month())
-	roman := strconv.Itoa(month)
+	day := t.Day()
+	year := t.Year()
+
+	romans := []string{"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"}
+	monthRoman := strconv.Itoa(month)
 	if month >= 1 && month <= 12 {
-		roman = romans[month]
+		monthRoman = romans[month]
 	}
+
+	monthsID := []string{
+		"", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+		"Juli", "Agustus", "September", "Oktober", "November", "Desember",
+	}
+	weekdaysID := []string{"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"}
+	weekdaysShortID := []string{"Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"}
+
+	monthName := monthsID[month]
+	if monthName == "" {
+		monthName = strconv.Itoa(month)
+	}
+	weekday := weekdaysID[int(t.Weekday())]
+	weekdayShort := weekdaysShortID[int(t.Weekday())]
+
+	// Longer keys first so partial tokens are not corrupted.
+	replacements := []struct{ key, val string }{
+		{"{number_padded_4}", fmt.Sprintf("%04d", number)},
+		{"{number_padded_2}", fmt.Sprintf("%02d", number)},
+		{"{number_padded}", fmt.Sprintf("%03d", number)},
+		{"{nomor_padded}", fmt.Sprintf("%03d", number)},
+		{"{month_roman}", monthRoman},
+		{"{bulan_romawi}", monthRoman},
+		{"{month_name}", monthName},
+		{"{bulan_nama}", monthName},
+		{"{month_padded}", fmt.Sprintf("%02d", month)},
+		{"{day_padded}", fmt.Sprintf("%02d", day)},
+		{"{year_short}", fmt.Sprintf("%02d", year%100)},
+		{"{tahun_pendek}", fmt.Sprintf("%02d", year%100)},
+		{"{date_id}", fmt.Sprintf("%02d/%02d/%04d", day, month, year)},
+		{"{tanggal}", fmt.Sprintf("%02d/%02d/%04d", day, month, year)},
+		{"{date}", fmt.Sprintf("%04d-%02d-%02d", year, month, day)},
+		{"{weekday_short}", weekdayShort},
+		{"{weekday}", weekday},
+		{"{hari_nama}", weekday},
+		{"{number}", strconv.Itoa(number)},
+		{"{nomor}", strconv.Itoa(number)},
+		{"{code}", code},
+		{"{kategori}", code},
+		{"{name}", name},
+		{"{nama_kategori}", name},
+		{"{year}", strconv.Itoa(year)},
+		{"{tahun}", strconv.Itoa(year)},
+		{"{month}", strconv.Itoa(month)},
+		{"{bulan_angka}", strconv.Itoa(month)},
+		{"{bulan}", fmt.Sprintf("%02d", month)},
+		{"{day}", strconv.Itoa(day)},
+		{"{hari_angka}", strconv.Itoa(day)},
+		{"{hari}", fmt.Sprintf("%02d", day)},
+	}
+
 	out := tmpl
-	out = strings.ReplaceAll(out, "{number}", strconv.Itoa(number))
-	out = strings.ReplaceAll(out, "{code}", code)
-	out = strings.ReplaceAll(out, "{month_roman}", roman)
-	out = strings.ReplaceAll(out, "{year}", strconv.Itoa(t.Year()))
+	for _, r := range replacements {
+		out = strings.ReplaceAll(out, r.key, r.val)
+	}
 	return out
+}
+
+// ParseIncomingDocument downloads an uploaded file and extracts nomor surat.
+func (s *LetterService) ParseIncomingDocument(documentURL, fileName string) (string, error) {
+	if strings.TrimSpace(documentURL) == "" {
+		return "", fmt.Errorf("document_url is required")
+	}
+	data, err := downloadBytes(documentURL)
+	if err != nil {
+		return "", fmt.Errorf("mengunduh file: %w", err)
+	}
+	return letterdoc.ParseIncomingLetterNumber(data, fileName)
+}
+
+// IncomingParsePreview holds OCR text and optional auto-detected nomor surat.
+type IncomingParsePreview struct {
+	LetterCode    string
+	ExtractedText string
+}
+
+// ParseIncomingPreview downloads a file and returns detected nomor plus copyable OCR text.
+func (s *LetterService) ParseIncomingPreview(documentURL, fileName string) (*IncomingParsePreview, error) {
+	if strings.TrimSpace(documentURL) == "" {
+		return nil, fmt.Errorf("document_url is required")
+	}
+	data, err := downloadBytes(documentURL)
+	if err != nil {
+		return nil, fmt.Errorf("mengunduh file: %w", err)
+	}
+	code, text := letterdoc.PreviewIncomingDocument(data, fileName)
+	return &IncomingParsePreview{
+		LetterCode:    code,
+		ExtractedText: text,
+	}, nil
+}
+
+func (s *LetterService) resolveIncomingCategoryID(tx *gorm.DB) (string, error) {
+	var cat models.LetterCategory
+	if err := tx.Where("code = ?", "SM-IN").First(&cat).Error; err != nil {
+		return "", fmt.Errorf("kategori surat masuk belum dikonfigurasi (jalankan seed)")
+	}
+	return cat.ID, nil
 }
 
 // Update modifies an existing letter.
@@ -337,6 +461,25 @@ func (s *LetterService) Update(id string, updates map[string]interface{}) (*mode
 	var item models.Letter
 	if err := s.DB.First(&item, "id = ?", id).Error; err != nil {
 		return nil, fmt.Errorf("letter not found: %w", err)
+	}
+
+	if item.Type == "incoming" {
+		fileName := item.Subject
+		if fn, ok := updates["file_name"].(string); ok && strings.TrimSpace(fn) != "" {
+			fileName = fn
+		}
+		delete(updates, "file_name")
+
+		if docURL, ok := updates["document_url"].(string); ok && strings.TrimSpace(docURL) != "" && docURL != item.DocumentUrl {
+			if fileName == "" {
+				fileName = path.Base(docURL)
+			}
+			parsed, err := s.ParseIncomingDocument(docURL, fileName)
+			if err != nil {
+				return nil, err
+			}
+			updates["letter_code"] = parsed
+		}
 	}
 
 	if err := s.DB.Model(&item).Updates(updates).Error; err != nil {

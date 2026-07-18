@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ResourceDefinition, ColumnDefinition } from "@/lib/resource";
 import { Search, Plus, Trash2, Download, Upload, Columns3 } from "@/lib/icons";
 import { DateFilter, type DateRange } from "./date-filter";
@@ -30,6 +30,8 @@ interface TableToolbarProps {
   // v3.31.35 — opens the Excel import modal. Hidden when the
   // resource opts out via table.import = false.
   onImport?: () => void;
+  /** Extra controls rendered on the right side of the toolbar (before column/export/create). */
+  extra?: ReactNode;
 }
 
 export function TableToolbar({
@@ -47,6 +49,7 @@ export function TableToolbar({
   onDateRangeChange,
   apiSearchParams,
   onImport,
+  extra,
 }: TableToolbarProps) {
   const [columnsOpen, setColumnsOpen] = useState(false);
 
@@ -118,6 +121,8 @@ export function TableToolbar({
           )}
         </div>
       )}
+
+      {extra}
 
       {/* Column visibility */}
       <div className="relative">

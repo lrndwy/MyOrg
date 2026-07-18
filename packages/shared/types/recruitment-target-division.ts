@@ -3,7 +3,7 @@ export interface RecruitmentTargetDivision {
   recruitment_id: string;
   recruitment: unknown;
   division_id: string;
-  division: { id?: string; name?: string } | null;
+  division: unknown;
   version: number;
   created_at: string;
   updated_at: string;

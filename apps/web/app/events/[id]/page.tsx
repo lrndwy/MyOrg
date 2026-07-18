@@ -8,6 +8,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { EventStatusBadge } from "@/components/display";
 import { formatDateTime } from "@/lib/datetime";
 import { useGetEvent, useDeleteEvent } from "@/hooks/use-events";
+import { useMyEventSubEvents } from "@/hooks/use-event-committee";
 import { useEventCheckInGate } from "@/hooks/use-event-check-in-gate";
 import { useCan } from "@/hooks/use-permissions-gate";
 
@@ -23,6 +24,7 @@ export default function EventDetailPage({ params }: PageProps) {
 function EventDetail({ id }: { id: string }) {
   const router = useRouter();
   const { data: event, isLoading, isError } = useGetEvent(id);
+  const { data: mySubEvents } = useMyEventSubEvents(id);
   const {
     attendance: myAttendance,
     activePermission,
@@ -88,7 +90,9 @@ function EventDetail({ id }: { id: string }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-            {event.division?.name || "General"}
+            {event.division && typeof event.division === "object" && "name" in event.division
+              ? (event.division as { name: string }).name
+              : "General"}
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">{event.title}</h1>
         </div>
@@ -137,6 +141,37 @@ function EventDetail({ id }: { id: string }) {
         <p className="mt-6 whitespace-pre-line text-sm text-text-secondary leading-relaxed">
           {event.description}
         </p>
+      )}
+
+      {event.event_type === "kepanitiaan" && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold text-foreground">Sub Event Kepanitiaan</h2>
+          {event.committee_description && (
+            <p className="mt-1 text-sm text-text-secondary">{event.committee_description}</p>
+          )}
+          {!mySubEvents?.length ? (
+            <p className="mt-3 text-sm text-text-muted">Belum ada sub event untuk Anda.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {mySubEvents.map((se) => (
+                <li key={se.id}>
+                  <Link
+                    href={`/events/${id}/sub-events/${se.id}`}
+                    className="block rounded-lg border border-border bg-bg-secondary px-4 py-3 hover:bg-bg-hover"
+                  >
+                    <p className="font-medium text-foreground">{se.title}</p>
+                    <p className="text-xs text-text-muted capitalize">
+                      {(se.sie as { name?: string } | null)?.name
+                        ? `${(se.sie as { name: string }).name} · `
+                        : ""}
+                      {se.status} · {se.attendance_mode}
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
 
       <div className="mt-8 flex flex-wrap gap-3">

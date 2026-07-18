@@ -1,9 +1,12 @@
-# Local development stack — Postgres, Redis, MinIO, Mailhog.
+# Local development stack — Postgres, Redis, MinIO, Mailhog, OCR (Tesseract).
 # Usage (from repo root):
 #   docker compose up -d
 #   docker compose ps
 #
-# Ports match .env (POSTGRES_PORT=5434, REDIS 6380, MINIO 9002/9003).
+# Ports match .env (POSTGRES_PORT=5434, REDIS 6380, MINIO 9002/9003, OCR 8884).
+# OCR: set TESSERACT_HTTP_URL=http://localhost:8884 in .env when the Go API runs
+# on the host (pnpm dev / grit start server) so image parsing uses Docker Tesseract
+# instead of a local brew install.
 
 services:
   postgres:
@@ -64,6 +67,16 @@ services:
     ports:
       - "1025:1025"
       - "8025:8025"
+
+  ocr:
+    image: hertzg/tesseract-server:latest
+    container_name: myorg-ocr
+    restart: unless-stopped
+    ports:
+      - "${OCR_PORT:-8884}:8884"
+    environment:
+      # Indonesian + English for incoming letter number OCR
+      TESSERACT_SERVER_INSTALL_LANGUAGES: ind
 
 volumes:
   postgres-data:

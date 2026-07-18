@@ -7,6 +7,7 @@ export const recruitmentTargetDivisionResource = defineResource({
   endpoint: "/api/recruitment_target_divisions",
   icon: "Database",
   label: { singular: "Recruitment Target Division", plural: "Recruitment Target Divisions" },
+  viewPermission: "recruitment.manage",
   table: {
     columns: [
       // grit:cols:auto-start

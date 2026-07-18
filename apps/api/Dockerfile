@@ -19,7 +19,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server \
 # Run stage
 FROM alpine:3.19
 
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata \
+    tesseract-ocr tesseract-ocr-data-ind tesseract-ocr-data-eng poppler-utils
 
 # Non-root runtime user — Sentinel/Pulse open embedded SQLite stores under
 # /app, so chown before USER or those fail with the misleading

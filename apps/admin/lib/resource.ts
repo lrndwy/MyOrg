@@ -94,7 +94,7 @@ export interface TableDefinition {
 
 // ─── Form Field Definitions ─────────────────────────────────────────
 
-export type FieldType = "text" | "textarea" | "number" | "select" | "date" | "datetime" | "toggle" | "checkbox" | "radio" | "richtext" | "image" | "images" | "video" | "videos" | "file" | "files" | "relationship-select" | "multi-relationship-select";
+export type FieldType = "text" | "textarea" | "number" | "select" | "date" | "datetime" | "toggle" | "checkbox" | "radio" | "richtext" | "image" | "images" | "video" | "videos" | "file" | "files" | "relationship-select" | "multi-relationship-select" | "recruitment-custom-answers";
 
 export interface FieldDefinition {
   key: string;
@@ -110,12 +110,18 @@ export interface FieldDefinition {
   step?: number;
   prefix?: string;
   suffix?: string;
+  /** HTML input type for text fields (password, email, tel, etc.). */
+  inputType?: "text" | "password" | "email" | "tel" | "url";
   rows?: number;
   colSpan?: 1 | 2;
   accept?: string;
   maxSize?: number;
   relatedEndpoint?: string;
   displayField?: string;
+  /** Join multiple API fields for option labels (e.g. letter_code + subject). */
+  displayFields?: string[];
+  /** When set, store this field from the selected row instead of `id`. */
+  valueField?: string;
   relationshipKey?: string;
 
   // v3.31.30 — file / files field knobs. Set by the resource generator
@@ -242,6 +248,11 @@ export interface ResourceDefinition {
   group?: string;
   // Hide this resource from the sidebar for users without ADMIN/EDITOR role.
   adminOnly?: boolean;
+  // Minimum custom RBAC permission code to view this resource in admin.
+  // Grit base Role ADMIN bypasses via /api/me/permissions (is_grit_admin).
+  viewPermission?: string;
+  /** When set, any listed code grants view access (in addition to viewPermission). */
+  viewPermissions?: string[];
 }
 
 // Stats cards shown above the data table on every resource page.
@@ -267,6 +278,11 @@ export interface StatCardConfig {
 // ─── defineResource Helper ──────────────────────────────────────────
 
 export function defineResource(config: ResourceDefinition): ResourceDefinition {
+  const actions = config.table.actions ?? ["create", "view", "edit", "delete"];
+  const bulkActions =
+    config.table.bulkActions ??
+    (actions.includes("delete") ? (["delete"] as BulkAction[]) : []);
+
   return {
     ...config,
     label: config.label ?? {
@@ -276,7 +292,8 @@ export function defineResource(config: ResourceDefinition): ResourceDefinition {
     table: {
       ...config.table,
       pageSize: config.table.pageSize ?? 20,
-      actions: config.table.actions ?? ["create", "view", "edit", "delete"],
+      actions,
+      bulkActions,
       searchable: config.table.searchable ?? true,
     },
     form: {

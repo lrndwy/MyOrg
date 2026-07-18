@@ -6,6 +6,7 @@ export const permissionResource = defineResource({
   endpoint: "/api/permissions",
   icon: "Lock",
   label: { singular: "Permission", plural: "Permissions" },
+  viewPermission: "roles.view",
   table: {
     columns: [
       // grit:cols:auto-start

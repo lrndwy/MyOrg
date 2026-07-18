@@ -14,7 +14,6 @@ import {
   ChevronRight,
   LayoutDashboard,
   Activity,
-  MessageSquare,
   Bell,
   Settings,
   TrendingUp,
@@ -23,9 +22,11 @@ import {
   LogOut,
   Globe,
   ExternalLink,
+  CreditCard,
 } from "@/lib/icons";
 import type { User } from "@repo/shared/types";
 import { getWebAppUrl } from "@/lib/panel-access";
+import { canViewResource, hasPermission, useMyPermissions } from "@/hooks/use-permissions-gate";
 
 // GRIT_CLI_VERSION is the scaffold version that generated this file.
 // Surfaced in the sidebar footer so the user can quickly see what Grit
@@ -38,14 +39,14 @@ const GRIT_CLI_VERSION = "v3.60.0";
 // developers don't accidentally remove them when editing resources.ts.
 const INTERNAL_NAV = [
   { href: "/system/activity",      label: "Activity",      iconKey: "Activity",       adminOnly: false },
-  { href: "/system/support",       label: "Support",       iconKey: "MessageSquare",  adminOnly: false },
   { href: "/system/notifications", label: "Notifications", iconKey: "Bell",           adminOnly: false },
 ] as const;
 
 // MyOrg singleton / workflow pages (not grit resource CRUD lists).
 const MYORG_NAV = [
-  { href: "/myorg/settings",     label: "Org Settings",          iconKey: "Settings", adminOnly: true },
-  { href: "/myorg/permissions",  label: "Permission Approvals",  iconKey: "Shield",   adminOnly: true },
+  { href: "/myorg/finance",        label: "Keuangan",              iconKey: "CreditCard", adminOnly: true, permission: "finance.view" },
+  { href: "/myorg/settings",     label: "Org Settings",          iconKey: "Settings", adminOnly: true, permission: "settings.manage" },
+  { href: "/myorg/permissions",  label: "Permission Approvals",  iconKey: "Shield",   adminOnly: true, permission: "attendance.approve" },
 ] as const;
 
 // v3.31.5: dedicated SYSTEM section for admin-only operational surfaces.
@@ -63,11 +64,11 @@ const SYSTEM_NAV = [
 const INTERNAL_ICON: Record<string, React.ReactNode> = {
   Activity: <Activity className="h-5 w-5" />,
   ActivityIcon: <Activity className="h-5 w-5" />,
-  MessageSquare: <MessageSquare className="h-5 w-5" />,
   Bell: <Bell className="h-5 w-5" />,
   Settings: <Settings className="h-5 w-5" />,
   TrendingUp: <TrendingUp className="h-5 w-5" />,
   Shield: <Shield className="h-5 w-5" />,
+  CreditCard: <CreditCard className="h-5 w-5" />,
 };
 
 function inferResourceGroup(slug: string): string | null {
@@ -80,7 +81,15 @@ function inferResourceGroup(slug: string): string | null {
     "permissions",
     "role-permissions",
   ]);
-  const KEGIATAN = new Set(["events", "attendances", "violations"]);
+  const KEGIATAN = new Set([
+    "events",
+    "attendances",
+    "violations",
+    "event-committee-sies",
+    "event-committee-members",
+    "event-sub-events",
+    "sub-event-attendances",
+  ]);
   const AKSES_IZIN = new Set(["permission-requests"]);
   const REKRUTMEN = new Set([
     "recruitments",
@@ -94,6 +103,7 @@ function inferResourceGroup(slug: string): string | null {
     "letter-templates",
   ]);
   const PENGUMUMAN = new Set(["announcements"]);
+  const KEUANGAN = new Set(["finance-categories", "finance-transactions"]);
 
   if (KEANGGOTAAN.has(slug)) return "Keanggotaan";
   if (KEGIATAN.has(slug)) return "Kegiatan";
@@ -101,6 +111,7 @@ function inferResourceGroup(slug: string): string | null {
   if (REKRUTMEN.has(slug)) return "Rekrutmen";
   if (SURAT.has(slug)) return "Surat";
   if (PENGUMUMAN.has(slug)) return "Pengumuman";
+  if (KEUANGAN.has(slug)) return "Keuangan";
   return null;
 }
 
@@ -136,6 +147,7 @@ export function CollapsibleSidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const { data: permissionsData } = useMyPermissions();
   const { data: orgSettings } = usePublicSettings();
   const webPortalUrl = `${getWebAppUrl()}/dashboard`;
 
@@ -147,21 +159,19 @@ export function CollapsibleSidebar({
     brandName.charAt(0).toUpperCase() || brand.logo.text;
 
   const isAdmin = user.role === "ADMIN" || user.role === "EDITOR";
-  const toggle = (key: string) => setExpandedGroups((p) => ({ ...p, [key]: !p[key] }));
+  const canSeePermission = (code: string | undefined) =>
+    hasPermission(permissionsData, code);
+  const canSeeResource = (resource: (typeof resources)[number]) =>
+    canViewResource(permissionsData, resource);
+  const isGroupExpanded = (key: string) => expandedGroups[key] !== false;
+  const toggle = (key: string) =>
+    setExpandedGroups((p) => ({ ...p, [key]: !(p[key] ?? true) }));
 
-  useEffect(() => {
-    // Auto-expand the group that contains the current resource route.
-    for (const r of resources) {
-      if (r.adminOnly && !isAdmin) continue;
-      const groupKey = r.group ?? inferResourceGroup(r.slug) ?? null;
-      if (!groupKey) continue;
-      if (pathname.startsWith(`/resources/${r.slug}`)) {
-        setExpandedGroups((p) => ({ ...p, [groupKey]: true }));
-      }
-    }
-  }, [pathname, isAdmin]);
-
-  const visibleResources = resources.filter((r) => !r.adminOnly || isAdmin);
+  const visibleResources = resources.filter((r) => {
+    if (r.adminOnly && !isAdmin) return false;
+    if (!canSeeResource(r)) return false;
+    return true;
+  });
   // Keep sidebar ordering stable and predictable on the dashboard:
   // sort by displayed plural label (fallback to resource name).
   const visibleResourcesSorted = [...visibleResources].sort((a, b) => {
@@ -169,7 +179,9 @@ export function CollapsibleSidebar({
     const bLabel = String(b.label?.plural ?? b.name ?? "");
     return aLabel.localeCompare(bLabel);
   });
-  const visibleMyOrg = MYORG_NAV.filter((r) => !r.adminOnly || isAdmin);
+  const visibleMyOrg = MYORG_NAV.filter(
+    (r) => (!r.adminOnly || isAdmin) && canSeePermission(r.permission)
+  );
   const visibleInternal = INTERNAL_NAV.filter((r) => !r.adminOnly || isAdmin);
   const visibleSystem = SYSTEM_NAV.filter((r) => !r.adminOnly || isAdmin);
 
@@ -290,12 +302,12 @@ export function CollapsibleSidebar({
                     <ChevronDown
                       className={
                         "h-3.5 w-3.5 transition-transform " +
-                        (expandedGroups[groupName] ? "rotate-0" : "-rotate-90")
+                        (isGroupExpanded(groupName) ? "rotate-0" : "-rotate-90")
                       }
                     />
                   </button>
                 )}
-                {(collapsed || expandedGroups[groupName]) && items.map((r) => {
+                {(collapsed || isGroupExpanded(groupName)) && items.map((r) => {
                   const Icon = getIcon(r.icon);
                   return (
                     <SidebarLink
@@ -334,7 +346,7 @@ export function CollapsibleSidebar({
             </div>
           )}
 
-          {/* Internal section — Activity / Support / Notifications. */}
+          {/* Internal section — Activity / Notifications. */}
           <div className="pt-3">
             {!collapsed && (
               <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-text-muted">

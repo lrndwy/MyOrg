@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import type { FieldDefinition, FormDefinition } from "@/lib/resource";
 import { TextField } from "./fields/text-field";
 import { TextareaField } from "./fields/textarea-field";
@@ -19,6 +19,8 @@ import { FilesField } from "./fields/files-field";
 import { RichTextField } from "./fields/rich-text-field";
 import { RelationshipSelectField } from "./fields/relationship-select-field";
 import { MultiRelationshipSelectField } from "./fields/multi-relationship-select-field";
+import { RecruitmentCustomAnswersFormField } from "@/components/recruitment/custom-answers-form-field";
+import { parseCustomAnswers } from "@/lib/recruitment-custom-answers";
 import { Loader2 } from "@/lib/icons";
 
 interface FormBuilderProps {
@@ -49,7 +51,7 @@ export function FormBuilder({
   const isTwoColumn = formDef.layout === "two-column";
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit((data) => onSubmit(serializeFormPayload(formDef.fields, data)))} className="space-y-6">
       <div
         className={`grid gap-4 ${isTwoColumn ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}
       >
@@ -290,9 +292,40 @@ export function FieldRenderer({
           )}
         />
       );
+    case "recruitment-custom-answers":
+      return (
+        <RecruitmentCustomAnswersFieldController control={control} errors={errors} />
+      );
     default:
       return null;
   }
+}
+
+function RecruitmentCustomAnswersFieldController({
+  control,
+  errors,
+}: {
+  control: ReturnType<typeof useForm>["control"];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  errors: Record<string, any>;
+}) {
+  const recruitmentId = useWatch({ control, name: "recruitment_id" });
+  const error = errors.custom_answers?.message as string | undefined;
+
+  return (
+    <Controller
+      name="custom_answers"
+      control={control}
+      render={({ field: formField }) => (
+        <RecruitmentCustomAnswersFormField
+          recruitmentId={recruitmentId}
+          value={formField.value}
+          onChange={formField.onChange}
+          error={error}
+        />
+      )}
+    />
+  );
 }
 
 // Field types whose value is an array. Defaulting to "" breaks the
@@ -379,9 +412,17 @@ export function buildDefaults(
       if (field.type === "textarea" && Array.isArray(value)) {
         value = value.map((v) => String(v)).join("\n");
       }
+      if (field.type === "textarea" && value && typeof value === "object") {
+        value = JSON.stringify(value, null, 2);
+      }
+      if (field.type === "recruitment-custom-answers") {
+        value = parseCustomAnswers(value);
+      }
       defaults[field.key] = value;
     } else if (field.defaultValue !== undefined) {
       defaults[field.key] = field.defaultValue;
+    } else if (field.type === "recruitment-custom-answers") {
+      defaults[field.key] = {};
     } else if (field.type === "toggle" || field.type === "checkbox") {
       defaults[field.key] = false;
     } else if (ARRAY_FIELD_TYPES.has(field.type)) {
@@ -393,4 +434,19 @@ export function buildDefaults(
     }
   }
   return defaults;
+}
+
+function serializeFormPayload(
+  fields: FieldDefinition[],
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const payload = { ...data };
+  for (const field of fields) {
+    const value = payload[field.key];
+    if (field.type === "recruitment-custom-answers" && value != null) {
+      payload[field.key] =
+        typeof value === "string" ? value : JSON.stringify(value);
+    }
+  }
+  return payload;
 }

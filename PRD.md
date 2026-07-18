@@ -164,6 +164,31 @@ Setiap fitur memiliki sekumpulan **permission code** yang dapat di-assign ke Rol
 - List/detail event
 - Rekap kehadiran: total hadir, izin, tidak hadir + detail per user
 
+#### 3.1.1 Event Kepanitiaan
+
+**Halaman Admin:**
+- `/myorg/events/:id/kepanitiaan` — dashboard kepanitiaan
+- `/myorg/events/:id/kepanitiaan/sies` — CRUD Sie + assign anggota
+- `/myorg/events/:id/kepanitiaan/sub-events` — CRUD Sub Event (rapat/kegiatan internal)
+- `/myorg/events/:id/kepanitiaan/sub-events/:subId` — detail Sub Event + notulensi + absensi manual
+- `/myorg/events/:id/kepanitiaan/sub-events/:subId/recap` — rekap absensi Sub Event
+
+**Halaman Web:**
+- `/events/:id` — tab Sub Event (jika event kepanitiaan)
+- `/events/:id/sub-events/:subId` — detail rapat
+- `/events/:id/sub-events/:subId/attendance` — absen selfie (jika mode `selfie`)
+
+**Alur — Membuat Event Kepanitiaan:**
+1. Admin buat event dengan `event_type = kepanitiaan`.
+2. Setup Sie kepanitiaan (Acara, Humas, dll.) dan assign anggota per Sie.
+3. Buat Sub Event (mis. rapat Sie Acara): set waktu, lokasi, Ketua Pelaksana, mode absensi (`selfie` atau `manual`).
+4. Saat Sub Event `ongoing`: anggota Sie absen (selfie) atau Ketua Pelaksana tandai hadir (manual).
+5. Upload notulensi/hasil rapat; lihat rekap absensi per Sub Event.
+
+**Input Sub Event:** `title, description, location, start_time, end_time, sie_id (optional), ketua_pelaksana_id, attendance_mode, minutes_file (optional)`
+
+**Output:** overview kepanitiaan, daftar Sie + anggota, Sub Event + rekap absensi + file notulensi
+
 ---
 
 ### 3.2 Absensi

@@ -4,57 +4,48 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/chrome/PageHeader";
+import { PermissionGate } from "@/components/auth/permission-gate";
+import { SubmissionsTable } from "@/components/recruitment/submissions-list";
+import { SubmissionCardsView } from "@/components/recruitment/submission-cards-view";
 import { IconButton } from "@/components/ui/IconButton";
+import { ViewToggle, type TableCardsViewMode } from "@/components/ui/view-toggle";
 import { apiClient } from "@/lib/api-client";
-import { formatDate, formatRelative } from "@/lib/formatters";
 import { ArrowLeft, Loader2, Database, AlertCircle } from "@/lib/icons";
-import type { Recruitment, RecruitmentSubmission } from "@repo/shared/types";
+import type { Recruitment, RecruitmentCustomField, RecruitmentSubmission } from "@repo/shared/types";
 
 type StatusTab = "all" | "pending" | "accepted" | "rejected";
 
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    pending: "bg-warning/15 text-warning",
-    accepted: "bg-success/15 text-success",
-    approved: "bg-success/15 text-success",
-    rejected: "bg-danger/15 text-danger",
-  };
+export default function RecruitmentSubmissionsPage() {
   return (
-    <span className={"inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize " + (styles[status] ?? "bg-text-muted/15 text-text-muted")}>
-      {status}
-    </span>
+    <PermissionGate permission="recruitment.manage">
+      <RecruitmentSubmissionsPageContent />
+    </PermissionGate>
   );
 }
 
-function formatCustomAnswers(raw: unknown): string {
-  if (raw == null || raw === "") return "—";
-  if (typeof raw === "object") {
-    const entries = Object.entries(raw as Record<string, unknown>);
-    if (!entries.length) return "—";
-    return entries.map(([k, v]) => `${k}: ${v}`).join(", ");
-  }
-  const s = String(raw);
-  try {
-    const parsed = JSON.parse(s) as Record<string, unknown>;
-    const entries = Object.entries(parsed);
-    if (!entries.length) return "—";
-    return entries.map(([k, v]) => `${k}: ${v}`).join(", ");
-  } catch {
-    return s;
-  }
-}
-
-export default function RecruitmentSubmissionsPage() {
+function RecruitmentSubmissionsPageContent() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [tab, setTab] = useState<StatusTab>("all");
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<TableCardsViewMode>("table");
 
   const { data: recruitment } = useQuery<Recruitment>({
     queryKey: ["myorg", "recruitment", params.id],
     queryFn: async () => {
       const { data } = await apiClient.get(`/api/recruitments/${params.id}`);
       return data.data as Recruitment;
+    },
+    enabled: !!params.id,
+  });
+
+  const { data: customFields } = useQuery<RecruitmentCustomField[]>({
+    queryKey: ["myorg", "recruitment-custom-fields", params.id],
+    queryFn: async () => {
+      const { data } = await apiClient.get(
+        `/api/recruitment_custom_fields?recruitment_id=${params.id}&page_size=100&sort_by=order_index&sort_order=asc`,
+      );
+      return (data.data ?? []) as RecruitmentCustomField[];
     },
     enabled: !!params.id,
   });
@@ -75,11 +66,12 @@ export default function RecruitmentSubmissionsPage() {
   });
 
   const rows = submissions ?? [];
+  const fields = customFields ?? [];
 
   const counts = useMemo(() => {
     const c: Record<StatusTab, number> = { all: rows.length, pending: 0, accepted: 0, rejected: 0 };
     for (const r of rows) {
-      if (r.status === "pending") c.pending++;
+      if (r.status === "pending" || r.status === "submitted" || r.status === "interview") c.pending++;
       else if (r.status === "accepted" || r.status === "approved") c.accepted++;
       else if (r.status === "rejected") c.rejected++;
     }
@@ -89,7 +81,13 @@ export default function RecruitmentSubmissionsPage() {
   const filtered = useMemo(() => {
     let list = rows;
     if (tab !== "all") {
-      list = list.filter((r) => (tab === "accepted" ? r.status === "accepted" || r.status === "approved" : r.status === tab));
+      list = list.filter((r) => {
+        if (tab === "accepted") return r.status === "accepted" || r.status === "approved";
+        if (tab === "pending") {
+          return r.status === "pending" || r.status === "submitted" || r.status === "interview";
+        }
+        return r.status === tab;
+      });
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -124,25 +122,29 @@ export default function RecruitmentSubmissionsPage() {
         }
       />
 
-      <div className="mb-4 flex items-center gap-1 rounded-lg border border-border bg-bg-secondary p-1 w-fit">
-        {([
-          { key: "all", label: "All" },
-          { key: "pending", label: "Pending" },
-          { key: "accepted", label: "Accepted" },
-          { key: "rejected", label: "Rejected" },
-        ] as { key: StatusTab; label: string }[]).map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
-              (tab === t.key ? "bg-accent text-white" : "text-text-secondary hover:bg-bg-hover")
-            }
-          >
-            {t.label}
-            <span className="ml-1.5 text-xs opacity-75">{counts[t.key]}</span>
-          </button>
-        ))}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary p-1 w-fit">
+          {([
+            { key: "all", label: "All" },
+            { key: "pending", label: "Pending" },
+            { key: "accepted", label: "Accepted" },
+            { key: "rejected", label: "Rejected" },
+          ] as { key: StatusTab; label: string }[]).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
+                (tab === t.key ? "bg-accent text-white" : "text-text-secondary hover:bg-bg-hover")
+              }
+            >
+              {t.label}
+              <span className="ml-1.5 text-xs opacity-75">{counts[t.key]}</span>
+            </button>
+          ))}
+        </div>
+
+        <ViewToggle view={view} onChange={setView} />
       </div>
 
       {isError ? (
@@ -161,39 +163,14 @@ export default function RecruitmentSubmissionsPage() {
               <Database className="h-8 w-8 text-text-muted" />
               <p className="mt-3 text-sm text-text-secondary">No submissions found</p>
             </div>
+          ) : view === "table" ? (
+            <SubmissionsTable rows={filtered} fields={fields} />
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs font-medium text-text-secondary">
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Division Interest</th>
-                  <th className="px-4 py-3">Contact</th>
-                  <th className="px-4 py-3">Answers</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Submitted</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((s) => (
-                  <tr key={s.id} className="border-b border-border last:border-0 align-top">
-                    <td className="px-4 py-3 font-medium text-foreground">{s.name}</td>
-                    <td className="px-4 py-3 text-text-secondary">{s.division_interest?.name ?? "—"}</td>
-                    <td className="px-4 py-3 text-text-secondary">{s.contact}</td>
-                    <td className="px-4 py-3 max-w-xs text-text-secondary">
-                      <p className="line-clamp-2" title={formatCustomAnswers(s.custom_answers)}>
-                        {formatCustomAnswers(s.custom_answers)}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={s.status} />
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary" title={formatDate(s.created_at)}>
-                      {formatRelative(s.created_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <SubmissionCardsView
+              rows={filtered}
+              fields={fields}
+              invalidateKeys={[["myorg", "recruitment-submissions", params.id]]}
+            />
           )}
         </div>
       )}

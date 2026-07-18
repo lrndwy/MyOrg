@@ -3,9 +3,9 @@ export interface RecruitmentSubmission {
   recruitment_id: string;
   recruitment: unknown;
   name: string;
-  nim?: string;
+  nim: string;
   division_interest_id: string;
-  division_interest: { id?: string; name?: string } | null;
+  division_interest: unknown;
   contact: string;
   custom_answers: unknown;
   status: string;

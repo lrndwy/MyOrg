@@ -144,6 +144,12 @@ func Models() []interface{} {
 		&AnnouncementAttachment{},
 		&LetterTemplate{},
 		&PushSubscription{},
+		&FinanceCategory{},
+		&FinanceTransaction{},
+		&EventCommitteeSie{},
+		&EventCommitteeMember{},
+		&EventSubEvent{},
+		&SubEventAttendance{},
 		// grit:models
 	}
 }

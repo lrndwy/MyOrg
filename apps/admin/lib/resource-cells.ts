@@ -51,6 +51,38 @@ export function userLabel(
   return userLabelFrom(row[key] as UserLike);
 }
 
+export function subEventTitle(row: Record<string, unknown>, key = "sub_event"): string {
+  const se = row[key] as { title?: string } | null | undefined;
+  return se?.title?.trim() || "—";
+}
+
+export function relatedName(
+  row: Record<string, unknown>,
+  key: string
+): string {
+  const rel = row[key] as { name?: string; title?: string } | null | undefined;
+  return rel?.name?.trim() || rel?.title?.trim() || "—";
+}
+
+export function roleName(row: Record<string, unknown>, key = "role"): string {
+  return relatedName(row, key);
+}
+
+export function permissionCode(row: Record<string, unknown>, key = "permission"): string {
+  const p = row[key] as { code?: string } | null | undefined;
+  return p?.code?.trim() || "—";
+}
+
+export function permissionField(
+  row: Record<string, unknown>,
+  field: "module" | "description",
+  key = "permission"
+): string {
+  const p = row[key] as Record<string, string> | null | undefined;
+  const val = p?.[field]?.trim();
+  return val || "—";
+}
+
 export function jsonPreview(value: unknown, max = 80): string {
   if (value == null || value === "") return "—";
   if (typeof value === "string") {

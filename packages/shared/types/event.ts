@@ -9,6 +9,8 @@ export interface Event {
   start_time: string | null;
   end_time: string | null;
   allow_permission: boolean;
+  event_type: string;
+  committee_description: string;
   status: string;
   version: number;
   created_at: string;

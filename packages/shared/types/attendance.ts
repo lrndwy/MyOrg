@@ -1,15 +1,9 @@
 export interface Attendance {
   id: string;
   event_id: string;
-  event: { id?: string; title?: string } | null;
+  event: unknown;
   user_id: string;
-  user: {
-    id?: string;
-    first_name?: string;
-    last_name?: string;
-    full_name?: string;
-    email?: string;
-  } | null;
+  user: unknown;
   status: string;
   selfie_url: string;
   signature_url: string;

@@ -1,21 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
-
-interface Event {
-  id: string;
-  title: string;
-  description: string;
-  division_id: string;
-  division?: any;
-  location: string;
-  banner_url: string;
-  start_time: string | null;
-  end_time: string | null;
-  allow_permission: boolean;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { Event } from "@repo/shared/types";
 
 interface EventsResponse {
   data: Event[];
