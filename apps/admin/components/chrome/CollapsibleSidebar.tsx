@@ -24,6 +24,7 @@ import {
   ExternalLink,
   CreditCard,
   Database,
+  FolderOpen,
 } from "@/lib/icons";
 import type { User } from "@repo/shared/types";
 import { getWebAppUrl } from "@/lib/panel-access";
@@ -56,7 +57,8 @@ const MYORG_NAV = [
 // surface for the broader browse case.
 const SYSTEM_NAV = [
   { href: "/settings/dashboard", label: "Dashboard settings", iconKey: "Settings",    adminOnly: false },
-  { href: "/system/backups",     label: "Data & Backup",    iconKey: "Database",     adminOnly: true },
+  { href: "/system/backups",     label: "Data & Backup",      iconKey: "Database",     adminOnly: true },
+  { href: "/system/files",       label: "Penyimpanan Cloud",  iconKey: "FolderOpen",   adminOnly: true, permission: "storage.manage" },
   { href: "/system/health",       label: "System Health", iconKey: "ActivityIcon", adminOnly: true },
   { href: "/system/performance",  label: "Performance",   iconKey: "TrendingUp",   adminOnly: true },
   { href: "/system/security",     label: "Security",      iconKey: "Shield",       adminOnly: true },
@@ -72,6 +74,7 @@ const INTERNAL_ICON: Record<string, React.ReactNode> = {
   Shield: <Shield className="h-5 w-5" />,
   CreditCard: <CreditCard className="h-5 w-5" />,
   Database: <Database className="h-5 w-5" />,
+  FolderOpen: <FolderOpen className="h-5 w-5" />,
 };
 
 function inferResourceGroup(slug: string): string | null {

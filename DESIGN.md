@@ -181,7 +181,7 @@ events.POST("", RequirePermission("events.create"), eventHandler.Create)
 attendance.PUT("/permission-requests/:id", RequirePermission("attendance.approve"), attendanceHandler.ReviewPermission)
 ```
 
-Daftar awal permission code mengikuti modul PRD: `settings.manage`, `users.view/create/edit/delete/import`, `roles.view/create/edit/delete`, `events.view/create/edit/delete`, `attendance.submit/approve`, `divisions.view/create/edit/delete`, `permission.submit`, `violations.view/manage`, `recruitment.manage`, `letters.view/manage`, `announcement.create`, `finance.view/create/edit/delete/categories/manage`. Seed awal ada di `grit seed` (lihat §6). Role sistem **Bendahara** otomatis mendapat semua permission modul `finance.*`.
+Daftar awal permission code mengikuti modul PRD: `settings.manage`, `users.view/create/edit/delete/import`, `roles.view/create/edit/delete`, `events.view/create/edit/delete`, `attendance.submit/approve`, `divisions.view/create/edit/delete`, `permission.submit`, `violations.view/manage`, `recruitment.manage`, `letters.view/manage`, `announcement.create`, `finance.view/create/edit/delete/categories/manage`, `storage.view/upload/delete/manage`. Seed awal ada di `grit seed` (lihat §6). Role sistem **Bendahara** otomatis mendapat semua permission modul `finance.*`.
 
 ## 5. Business Logic Kunci (di Service Layer)
 
@@ -274,6 +274,8 @@ Beberapa hal tidak bisa full-generate dan perlu ditulis manual, didokumentasikan
 ## 8. File Storage Layout (S3/MinIO bucket)
 
 ```
+uploads/{YYYY}/{MM}/{timestamp}-{filename}   — Penyimpanan Cloud + lampiran form
+thumbnails/{YYYY}/{MM}/...                   — thumbnail gambar (worker)
 avatars/{user_id}/{timestamp}.jpg
 attendance/selfies/{event_id}/{user_id}.jpg
 attendance/signatures/{event_id}/{user_id}.png
@@ -285,7 +287,18 @@ letter-templates/{template_id}/template.docx
 announcements/{announcement_id}/{filename}
 settings/logo.{ext}
 settings/icon.{ext}
+backups/{date}-{id}.zip
 ```
+
+### Penyimpanan Cloud (modul `uploads`)
+
+- **Admin only:** `/system/files` — role dengan `storage.manage` (atau Grit ADMIN) mengelola **semua file organisasi** dengan folder virtual, drag & drop, preview, dan konfirmasi hapus.
+- **Web:** tidak ada halaman penyimpanan user (fitur dipusatkan di admin).
+- **API:** `GET/POST /api/uploads`, `GET /api/uploads/stats`, `GET /api/uploads/:id/download`, `DELETE /api/uploads/:id`, `PATCH /api/uploads/:id/move`.
+- **Folder API:** `GET/POST /api/storage/folders`, `PATCH/DELETE /api/storage/folders/:id`, `GET /api/storage/folders/:id/breadcrumb` (semua butuh `storage.manage`).
+- Upload cloud: `POST /api/uploads?source=cloud&accepts=all&folder_id=<uuid>` (maks. 100 MB, auto-`claimed_at`).
+- List default scoped `user_id = caller`; `?all=true` butuh `storage.manage`. Filter folder: `?folder_id=` (root) atau UUID folder.
+- Model `StorageFolder` (virtual directory) + kolom `uploads.folder_id` nullable.
 
 ## 9. Observability & Keamanan
 

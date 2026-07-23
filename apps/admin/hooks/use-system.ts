@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Upload, PaginatedResponse } from "@repo/shared/types";
+import type { Upload, PaginatedResponse, StorageFolder, StorageBreadcrumb } from "@repo/shared/types";
 import { apiClient, uploadFile } from "@/lib/api-client";
 
 // ── Jobs ────────────────────────────────────────────────────────
@@ -77,11 +77,23 @@ export function useClearQueue() {
 // grit sync) — no inline duplicates that silently drift.
 type UploadListResponse = PaginatedResponse<Upload>;
 
-export function useUploads(page = 1, pageSize = 20) {
+export function useUploads(
+  page = 1,
+  pageSize = 20,
+  opts?: { search?: string; kind?: string; folderId?: string | null },
+) {
   return useQuery<UploadListResponse>({
-    queryKey: ["admin", "uploads", page, pageSize],
+    queryKey: ["admin", "uploads", page, pageSize, opts?.search, opts?.kind, opts?.folderId ?? "root"],
     queryFn: async () => {
-      const { data } = await apiClient.get(`/api/uploads?page=${page}&page_size=${pageSize}`);
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+        all: "true",
+        folder_id: opts?.folderId ?? "",
+      });
+      if (opts?.search) params.set("search", opts.search);
+      if (opts?.kind) params.set("kind", opts.kind);
+      const { data } = await apiClient.get(`/api/uploads?${params}`);
       return data;
     },
   });
@@ -101,24 +113,28 @@ export function useUploadStats() {
   return useQuery<{ data: UploadStats }>({
     queryKey: ["admin", "uploads", "stats"],
     queryFn: async () => {
-      const { data } = await apiClient.get("/api/uploads/stats");
+      const { data } = await apiClient.get("/api/uploads/stats?all=true");
       return data;
     },
   });
 }
 
-export function useUploadFile() {
+export function useUploadFile(folderId?: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (file: File) => {
-      const result = await uploadFile(file);
-      // uploadFile returns Record<string, unknown>; the server actually
-      // sends the Upload shape so a two-step assertion through unknown
-      // is sound and matches the shared type without a runtime cost.
-      return result.data as unknown as Upload;
+      const form = new FormData();
+      form.append("file", file, file.name);
+      const params = new URLSearchParams({ source: "cloud", accepts: "all" });
+      if (folderId) params.set("folder_id", folderId);
+      const { data } = await apiClient.post(`/api/uploads?${params}`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return data.data as unknown as Upload;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "uploads"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "storage-folders"] });
     },
   });
 }
@@ -131,8 +147,79 @@ export function useDeleteUpload() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "uploads"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "uploads", "stats"] });
     },
   });
+}
+
+export function useStorageFolders(parentId?: string | null) {
+  return useQuery<{ data: StorageFolder[] }>({
+    queryKey: ["admin", "storage-folders", parentId ?? "root"],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (parentId) params.set("parent_id", parentId);
+      const { data } = await apiClient.get(`/api/storage/folders?${params}`);
+      return data;
+    },
+  });
+}
+
+export function useStorageBreadcrumb(folderId?: string | null) {
+  return useQuery<{ data: StorageBreadcrumb[] }>({
+    queryKey: ["admin", "storage-folders", "breadcrumb", folderId ?? "root"],
+    enabled: !!folderId,
+    queryFn: async () => {
+      const { data } = await apiClient.get(`/api/storage/folders/${folderId}/breadcrumb`);
+      return data;
+    },
+  });
+}
+
+export function useCreateStorageFolder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { name: string; parent_id?: string | null }) => {
+      const { data } = await apiClient.post("/api/storage/folders", payload);
+      return data.data as StorageFolder;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "storage-folders"] });
+    },
+  });
+}
+
+export function useDeleteStorageFolder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/api/storage/folders/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "storage-folders"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "uploads"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "uploads", "stats"] });
+    },
+  });
+}
+
+export function useMoveUpload() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, folderId }: { id: string; folderId: string | null }) => {
+      const { data } = await apiClient.patch(`/api/uploads/${id}/move`, {
+        folder_id: folderId,
+      });
+      return data.data as Upload;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "uploads"] });
+    },
+  });
+}
+
+export async function fetchUploadDownloadUrl(id: string) {
+  const { data } = await apiClient.get(`/api/uploads/${id}/download`);
+  return data.data as { url: string; filename: string; expires_in: number };
 }
 
 // ── Cron ────────────────────────────────────────────────────────

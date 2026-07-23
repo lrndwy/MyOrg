@@ -17,8 +17,23 @@ import (
 	"myorg/apps/api/internal/files"
 	"myorg/apps/api/internal/jobs"
 	"myorg/apps/api/internal/models"
+	"myorg/apps/api/internal/services"
 	"myorg/apps/api/internal/storage"
 )
+
+// MaxUploadSize is the maximum file size (50 MB).
+const MaxUploadSize = 50 << 20
+
+// CloudMaxUploadSize is the cap for Penyimpanan Cloud uploads (100 MB).
+const CloudMaxUploadSize = 100 << 20
+
+// UploadHandler handles file upload endpoints.
+type UploadHandler struct {
+	DB      *gorm.DB
+	Storage *storage.Storage
+	Jobs    *jobs.Client
+	Perms   *services.PermissionChecker
+}
 
 // AllowedMimeTypes defines which file types can be uploaded.
 var AllowedMimeTypes = map[string]bool{
@@ -37,16 +52,6 @@ var AllowedMimeTypes = map[string]bool{
 	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
 }
 
-// MaxUploadSize is the maximum file size (50 MB).
-const MaxUploadSize = 50 << 20
-
-// UploadHandler handles file upload endpoints.
-type UploadHandler struct {
-	DB      *gorm.DB
-	Storage *storage.Storage
-	Jobs    *jobs.Client
-}
-
 // Create handles file upload via multipart form.
 //
 // Query params (v3.31.30):
@@ -56,6 +61,8 @@ type UploadHandler struct {
 //               alias set. Absent = fall back to the global allowlist.
 //   max_size  — per-field byte cap. Overrides MaxUploadSize when set
 //               (e.g. video fields raise it to 300MB).
+//   source    — "cloud" marks the file as owned Penyimpanan Cloud content
+//               (auto-claimed, accepts=all default, 100MB cap).
 //
 // Response: a files.FileRef directly under data so the frontend can
 // store it verbatim in form state, no shape massaging needed.
@@ -123,10 +130,17 @@ func (h *UploadHandler) Create(c *gin.Context) {
 				acceptsList = append(acceptsList, s)
 			}
 		}
+	} else if c.Query("source") == "cloud" {
+		acceptsList = []string{"all"}
 	}
+
+	cloudSource := c.Query("source") == "cloud"
 
 	// Per-field max size override. Bytes.
 	maxSize := int64(MaxUploadSize)
+	if cloudSource {
+		maxSize = CloudMaxUploadSize
+	}
 	if m := c.Query("max_size"); m != "" {
 		if parsed, perr := strconv.ParseInt(m, 10, 64); perr == nil && parsed > 0 {
 			maxSize = parsed
@@ -202,22 +216,6 @@ func (h *UploadHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Generate unique filename
-	ext := filepath.Ext(header.Filename)
-	filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), strings.TrimSuffix(filepath.Base(header.Filename), ext), ext)
-	key := fmt.Sprintf("uploads/%s/%s", time.Now().Format("2006/01"), filename)
-
-	// Upload to storage
-	if err := h.Storage.Upload(c.Request.Context(), key, file, mimeType); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"code":    "UPLOAD_FAILED",
-				"message": "Failed to upload file",
-			},
-		})
-		return
-	}
-
 	userID := ""
 	if uid, ok := c.Get("user_id"); ok {
 		if s, ok := uid.(string); ok {
@@ -234,6 +232,29 @@ func (h *UploadHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if cloudSource {
+		if _, ok := userFromContext(c); !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": gin.H{"code": "UNAUTHORIZED", "message": "Authentication required"},
+			})
+			return
+		}
+	}
+
+	ext := filepath.Ext(header.Filename)
+	filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), strings.TrimSuffix(filepath.Base(header.Filename), ext), ext)
+	key := fmt.Sprintf("uploads/%s/%s", time.Now().Format("2006/01"), filename)
+
+	if err := h.Storage.Upload(c.Request.Context(), key, file, mimeType); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"code":    "UPLOAD_FAILED",
+				"message": "Failed to upload file",
+			},
+		})
+		return
+	}
+
 	upload := models.Upload{
 		Filename:     filename,
 		OriginalName: header.Filename,
@@ -242,6 +263,32 @@ func (h *UploadHandler) Create(c *gin.Context) {
 		Path:         key,
 		URL:          h.Storage.GetURL(key),
 		UserID:       userID,
+	}
+	if cloudSource {
+		now := time.Now()
+		upload.ClaimedAt = &now
+	}
+
+	if folderRaw := c.Query("folder_id"); folderRaw != "" {
+		manager, uok := userFromContext(c)
+		if !uok || !h.canManageStorage(c, manager) {
+			_ = h.Storage.Delete(c.Request.Context(), key)
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": gin.H{"code": "FORBIDDEN", "message": "Folder upload membutuhkan storage.manage"},
+			})
+			return
+		}
+		folderID := normalizeFolderParentID(folderRaw)
+		if folderID != nil {
+			if _, err := h.folderByID(*folderID); err != nil {
+				_ = h.Storage.Delete(c.Request.Context(), key)
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{"code": "NOT_FOUND", "message": "Folder tujuan tidak ditemukan"},
+				})
+				return
+			}
+			upload.FolderID = folderID
+		}
 	}
 
 	if err := h.DB.Create(&upload).Error; err != nil {
@@ -282,32 +329,8 @@ func (h *UploadHandler) Create(c *gin.Context) {
 	})
 }
 
-// Stats returns aggregate storage usage across the uploads table.
-// Surfaces total count, total bytes, and a per-kind breakdown
-// (image / video / audio / document / other) so the storage admin
-// page can show usage at a glance. v3.31.32.
-func (h *UploadHandler) Stats(c *gin.Context) {
-	type kindRow struct {
-		Kind  string `gorm:"column:kind" json:"kind"`
-		Count int64  `gorm:"column:count" json:"count"`
-		Size  int64  `gorm:"column:size" json:"size"`
-	}
-
-	var total int64
-	if err := h.DB.Model(&models.Upload{}).Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to compute stats"},
-		})
-		return
-	}
-
-	var totalSize int64
-	h.DB.Model(&models.Upload{}).Select("COALESCE(SUM(size), 0)").Scan(&totalSize)
-
-	// Bucket by MIME kind. SUBSTR + CASE in raw SQL keeps this a single
-	// scan regardless of DB engine (works on Postgres + SQLite).
-	rows := []kindRow{}
-	bucketExpr := `CASE
+// uploadKindExpr is shared by Stats/List kind bucketing.
+const uploadKindExpr = `CASE
 		WHEN mime_type LIKE 'image/%' THEN 'image'
 		WHEN mime_type LIKE 'video/%' THEN 'video'
 		WHEN mime_type LIKE 'audio/%' THEN 'audio'
@@ -316,8 +339,59 @@ func (h *UploadHandler) Stats(c *gin.Context) {
 		WHEN mime_type LIKE '%wordprocessing%' OR mime_type = 'application/msword' THEN 'document'
 		ELSE 'other'
 	END`
-	h.DB.Model(&models.Upload{}).
-		Select(bucketExpr+" AS kind, COUNT(*) AS count, COALESCE(SUM(size), 0) AS size").
+
+func applyUploadKindFilter(query *gorm.DB, kind string) *gorm.DB {
+	kind = strings.TrimSpace(strings.ToLower(kind))
+	if kind == "" {
+		return query
+	}
+	return query.Where("("+uploadKindExpr+") = ?", kind)
+}
+
+// Stats returns aggregate storage usage across the uploads table.
+// Surfaces total count, total bytes, and a per-kind breakdown
+// (image / video / audio / document / other) so the storage admin
+// page can show usage at a glance. v3.31.32.
+func (h *UploadHandler) Stats(c *gin.Context) {
+	user, ok := h.requireStorageView(c)
+	if !ok {
+		return
+	}
+
+	type kindRow struct {
+		Kind  string `gorm:"column:kind" json:"kind"`
+		Count int64  `gorm:"column:count" json:"count"`
+		Size  int64  `gorm:"column:size" json:"size"`
+	}
+
+	query := h.DB.Model(&models.Upload{})
+	scopeAll := c.Query("all") == "true" && h.canManageStorage(c, user)
+	if !scopeAll {
+		query = query.Where("user_id = ?", user.ID)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to compute stats"},
+		})
+		return
+	}
+
+	var totalSize int64
+	sizeQuery := h.DB.Model(&models.Upload{})
+	if !scopeAll {
+		sizeQuery = sizeQuery.Where("user_id = ?", user.ID)
+	}
+	sizeQuery.Select("COALESCE(SUM(size), 0)").Scan(&totalSize)
+
+	rows := []kindRow{}
+	statsQuery := h.DB.Model(&models.Upload{})
+	if !scopeAll {
+		statsQuery = statsQuery.Where("user_id = ?", user.ID)
+	}
+	statsQuery.
+		Select(uploadKindExpr+" AS kind, COUNT(*) AS count, COALESCE(SUM(size), 0) AS size").
 		Group("kind").
 		Scan(&rows)
 
@@ -332,6 +406,11 @@ func (h *UploadHandler) Stats(c *gin.Context) {
 
 // List returns a paginated list of uploads.
 func (h *UploadHandler) List(c *gin.Context) {
+	user, ok := h.requireStorageView(c)
+	if !ok {
+		return
+	}
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
@@ -343,10 +422,27 @@ func (h *UploadHandler) List(c *gin.Context) {
 	}
 
 	query := h.DB.Model(&models.Upload{})
+	if c.Query("all") == "true" && h.canManageStorage(c, user) {
+		// org-wide listing for admin
+	} else {
+		query = query.Where("user_id = ?", user.ID)
+	}
 
-	// Filter by MIME type
+	if search := strings.TrimSpace(c.Query("search")); search != "" {
+		query = query.Where("original_name ILIKE ?", "%"+search+"%")
+	}
 	if mimeType := c.Query("mime_type"); mimeType != "" {
 		query = query.Where("mime_type LIKE ?", mimeType+"%")
+	}
+	query = applyUploadKindFilter(query, c.Query("kind"))
+
+	if folderRaw, ok := c.GetQuery("folder_id"); ok {
+		folderID := normalizeFolderParentID(folderRaw)
+		if folderID == nil {
+			query = query.Where("folder_id IS NULL")
+		} else {
+			query = query.Where("folder_id = ?", *folderID)
+		}
 	}
 
 	var total int64
@@ -379,15 +475,26 @@ func (h *UploadHandler) List(c *gin.Context) {
 
 // GetByID returns a single upload by ID.
 func (h *UploadHandler) GetByID(c *gin.Context) {
+	user, ok := h.requireStorageView(c)
+	if !ok {
+		return
+	}
+
 	id := c.Param("id")
 
 	var upload models.Upload
-	if err := h.DB.First(&upload, id).Error; err != nil {
+	if err := h.DB.First(&upload, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": gin.H{
 				"code":    "NOT_FOUND",
 				"message": "Upload not found",
 			},
+		})
+		return
+	}
+	if !h.uploadVisibleTo(c, &upload, user) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{"code": "FORBIDDEN", "message": "Tidak memiliki akses file ini"},
 		})
 		return
 	}
@@ -397,17 +504,75 @@ func (h *UploadHandler) GetByID(c *gin.Context) {
 	})
 }
 
+// Download returns a short-lived signed URL for downloading an upload.
+func (h *UploadHandler) Download(c *gin.Context) {
+	if h.Storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{"code": "STORAGE_UNAVAILABLE", "message": "File storage is not configured"},
+		})
+		return
+	}
+
+	user, ok := h.requireStorageView(c)
+	if !ok {
+		return
+	}
+
+	id := c.Param("id")
+	var upload models.Upload
+	if err := h.DB.First(&upload, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": gin.H{"code": "NOT_FOUND", "message": "Upload not found"},
+		})
+		return
+	}
+	if !h.uploadVisibleTo(c, &upload, user) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{"code": "FORBIDDEN", "message": "Tidak memiliki akses file ini"},
+		})
+		return
+	}
+
+	const ttl = 15 * time.Minute
+	url, err := h.Storage.GetSignedURL(c.Request.Context(), upload.Path, ttl)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to generate download URL"},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"url":        url,
+			"expires_in": int(ttl.Seconds()),
+			"filename":   upload.OriginalName,
+		},
+	})
+}
+
 // Delete removes an upload and its stored file.
 func (h *UploadHandler) Delete(c *gin.Context) {
+	user, ok := h.requireStorageView(c)
+	if !ok {
+		return
+	}
+
 	id := c.Param("id")
 
 	var upload models.Upload
-	if err := h.DB.First(&upload, id).Error; err != nil {
+	if err := h.DB.First(&upload, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": gin.H{
 				"code":    "NOT_FOUND",
 				"message": "Upload not found",
 			},
+		})
+		return
+	}
+	if !h.uploadVisibleTo(c, &upload, user) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{"code": "FORBIDDEN", "message": "Tidak memiliki akses file ini"},
 		})
 		return
 	}

@@ -107,6 +107,9 @@ func DefaultMaxSizeBytes(accepts []string) int64 {
 		if strings.EqualFold(a, "video") {
 			return 300 << 20 // 300 MB
 		}
+		if strings.EqualFold(a, "all") {
+			return 100 << 20 // 100 MB — Penyimpanan Cloud default
+		}
 	}
 	return 5 << 20 // 5 MB
 }

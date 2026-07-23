@@ -17,7 +17,7 @@ export {
   apiErrorFields,
 } from "./api";
 
-export type { Upload } from "./upload";
+export type { Upload, StorageFolder, StorageBreadcrumb } from "./upload";
 export type { FileRef } from "./file-ref";
 export type { Division } from "./division";
 export type { Role } from "./role";

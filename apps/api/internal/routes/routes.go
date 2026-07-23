@@ -330,6 +330,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	syncRegistry := sync.NewRegistry()
 	syncRegistry.Register("users", &models.User{})
 	syncRegistry.Register("uploads", &models.Upload{})
+	syncRegistry.Register("storage_folders", &models.StorageFolder{})
 	syncRegistry.Register("divisions", &models.Division{})
 	syncRegistry.Register("roles", &models.Role{})
 	syncRegistry.Register("permissions", &models.Permission{})
@@ -426,6 +427,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// grit:handlers
 
 	permChecker := services.NewPermissionChecker(db)
+	uploadHandler.Perms = permChecker
 	myorgHandler := &handlers.MyOrgHandler{
 		DB:                   db,
 		OrgSettings:          &services.OrganizationSettingService{DB: db},
@@ -601,6 +603,13 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/uploads/complete", uploadHandler.CompleteUpload)
 		protected.GET("/uploads", uploadHandler.List)
 		protected.GET("/uploads/stats", uploadHandler.Stats)
+		protected.GET("/storage/folders", uploadHandler.ListFolders)
+		protected.POST("/storage/folders", uploadHandler.CreateFolder)
+		protected.GET("/storage/folders/:id/breadcrumb", uploadHandler.FolderBreadcrumb)
+		protected.PATCH("/storage/folders/:id", uploadHandler.UpdateFolder)
+		protected.DELETE("/storage/folders/:id", uploadHandler.DeleteFolder)
+		protected.PATCH("/uploads/:id/move", uploadHandler.MoveUpload)
+		protected.GET("/uploads/:id/download", uploadHandler.Download)
 		protected.GET("/uploads/:id", uploadHandler.GetByID)
 		protected.DELETE("/uploads/:id", uploadHandler.Delete)
 

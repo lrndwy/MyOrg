@@ -18,6 +18,8 @@ type Upload struct {
 	ThumbnailURL string         `gorm:"size:500" json:"thumbnail_url"`
 	UserID       string         `gorm:"size:36;index;not null" json:"user_id"`
 	User         User           `gorm:"foreignKey:UserID" json:"-"`
+	FolderID     *string        `gorm:"size:36;index" json:"folder_id,omitempty"`
+	Folder       *StorageFolder `gorm:"foreignKey:FolderID" json:"-"`
 	Version      int            `gorm:"not null;default:1" json:"version"`
 	// v3.31.33 -- claimed_at is set when a parent record references this
 	// upload's path/key via a FileRef column. NULL means abandoned, and

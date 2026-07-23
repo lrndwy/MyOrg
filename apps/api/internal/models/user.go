@@ -101,6 +101,7 @@ func Models() []interface{} {
 	return []interface{}{
 		&User{},
 		&Upload{},
+		&StorageFolder{},
 		&TwoFactorConfig{},
 		&TrustedDevice{},
 		&TOTPPendingToken{},
