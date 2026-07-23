@@ -13,16 +13,6 @@ export const eventResource = defineResource({
       // grit:cols:auto-start
       { key: "title", label: "Title", sortable: true, searchable: true },
       {
-        key: "event_type",
-        label: "Tipe",
-        sortable: true,
-        format: "badge",
-        badge: {
-          general: { color: "muted", label: "General" },
-          kepanitiaan: { color: "info", label: "Kepanitiaan" },
-        },
-      },
-      {
         key: "division",
         label: "Division",
         cell: (row) => divisionName(row),
@@ -48,19 +38,11 @@ export const eventResource = defineResource({
         label: "Manage",
         cell: (row) => {
           const id = typeof row.id === "string" ? row.id : "";
-          const eventType = typeof row.event_type === "string" ? row.event_type : "general";
           if (!id) return "—";
           return (
-            <span className="flex flex-col gap-1 text-sm">
-              <a href={`/myorg/events/${id}/recap`} className="text-accent hover:underline">
-                Rekap
-              </a>
-              {eventType === "kepanitiaan" && (
-                <a href={`/myorg/events/${id}/kepanitiaan`} className="text-accent hover:underline">
-                  Kepanitiaan
-                </a>
-              )}
-            </span>
+            <a href={`/myorg/events/${id}/recap`} className="text-sm text-accent hover:underline">
+              Rekap
+            </a>
           );
         },
       },
@@ -68,15 +50,6 @@ export const eventResource = defineResource({
       // grit:cols:auto-end
     ],
     filters: [
-      {
-        key: "event_type",
-        label: "Tipe Event",
-        type: "select",
-        options: [
-          { label: "General", value: "general" },
-          { label: "Kepanitiaan", value: "kepanitiaan" },
-        ],
-      },
       { key: "allow_permission", label: "Allow Permission", type: "boolean" },
       {
         key: "status",
@@ -100,24 +73,6 @@ export const eventResource = defineResource({
       // grit:fields:auto-start
       { key: "title", label: "Title", type: "text", required: true },
       { key: "description", label: "Description", type: "textarea" },
-      {
-        key: "event_type",
-        label: "Tipe Event",
-        type: "select",
-        required: true,
-        defaultValue: "general",
-        options: [
-          { label: "General", value: "general" },
-          { label: "Kepanitiaan", value: "kepanitiaan" },
-        ],
-      },
-      {
-        key: "committee_description",
-        label: "Deskripsi Kepanitiaan",
-        type: "textarea",
-        description: "Visi/tujuan kepanitiaan (hanya untuk tipe Kepanitiaan)",
-        colSpan: 2,
-      },
       {
         key: "division_id",
         label: "Division",

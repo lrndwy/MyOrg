@@ -2,7 +2,12 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +26,11 @@ const (
 	downloadURLTTL = 15 * time.Minute
 	// backupTimeout bounds a single run so a hung upload can't wedge the worker.
 	backupTimeout = 30 * time.Minute
+	// restoreMaxUpload caps uploaded backup archives (2 GB, includes DB + files).
+	restoreMaxUpload = 2 << 30
 )
+
+var restoreGate sync.Mutex
 
 // BackupHandler serves the full-database backup index.
 type BackupHandler struct {
@@ -84,6 +93,201 @@ func (h *BackupHandler) Generate(c *gin.Context) {
 	}(*rec)
 
 	c.JSON(http.StatusAccepted, gin.H{"data": rec, "message": "Backup started"})
+}
+
+// Export streams a fresh full-database backup ZIP directly to the client.
+// Does not require object storage — useful for one-off downloads.
+func (h *BackupHandler) Export(c *gin.Context) {
+	filename := "myorg-backup-" + time.Now().UTC().Format("2006-01-02-150405") + ".zip"
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupTimeout)
+	defer cancel()
+
+	man, err := h.svc().ArchiveTo(ctx, c.Writer)
+	if err != nil {
+		// Headers may already be sent — log only; client sees truncated zip.
+		_ = man
+		return
+	}
+}
+
+// RestoreUpload replays an uploaded backup ZIP into the database.
+func (h *BackupHandler) RestoreUpload(c *gin.Context) {
+	if c.PostForm("confirm") != "true" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{"code": "CONFIRMATION_REQUIRED", "message": "Set confirm=true to replace all database data"},
+		})
+		return
+	}
+
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, restoreMaxUpload)
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{"code": "INVALID_FILE", "message": "Upload a backup .zip file"},
+		})
+		return
+	}
+	defer file.Close()
+
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".zip") {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{"code": "INVALID_FILE", "message": "Backup archive must be a .zip file"},
+		})
+		return
+	}
+
+	tmp, err := os.CreateTemp("", "myorg-restore-*.zip")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to prepare restore"},
+		})
+		return
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := io.Copy(tmp, file); err != nil {
+		tmp.Close()
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to read uploaded archive"},
+		})
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to finalize uploaded archive"},
+		})
+		return
+	}
+
+	man, err := h.runRestore(c, tmpPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "RESTORE_FAILED", "message": err.Error()},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    man,
+		"message": fmt.Sprintf("Database restored (%d files)", man.FileCount),
+	})
+}
+
+// RestoreByID replays a stored backup archive from object storage.
+func (h *BackupHandler) RestoreByID(c *gin.Context) {
+	var req struct {
+		Confirm bool `json:"confirm"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || !req.Confirm {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{"code": "CONFIRMATION_REQUIRED", "message": "Send {\"confirm\": true} to replace all database data"},
+		})
+		return
+	}
+
+	if h.Storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{"code": "STORAGE_UNAVAILABLE", "message": "Object storage is not configured"},
+		})
+		return
+	}
+
+	var b models.Backup
+	if err := h.DB.First(&b, "id = ?", c.Param("id")).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": gin.H{"code": "NOT_FOUND", "message": "Backup not found"},
+		})
+		return
+	}
+	if b.Status != "READY" || b.StorageKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{"code": "NOT_AVAILABLE", "message": "This backup is not available for restore"},
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupTimeout)
+	defer cancel()
+
+	reader, err := h.Storage.Download(ctx, b.StorageKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to download backup archive"},
+		})
+		return
+	}
+	defer reader.Close()
+
+	tmp, err := os.CreateTemp("", "myorg-restore-*.zip")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to prepare restore"},
+		})
+		return
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := io.Copy(tmp, reader); err != nil {
+		tmp.Close()
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to save backup archive"},
+		})
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to finalize backup archive"},
+		})
+		return
+	}
+
+	man, err := h.runRestore(c, tmpPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"code": "RESTORE_FAILED", "message": err.Error()},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    man,
+		"message": fmt.Sprintf("Database restored from backup %s (%d files)", b.ID, man.FileCount),
+	})
+}
+
+func (h *BackupHandler) runRestore(c *gin.Context, zipPath string) (backup.Manifest, error) {
+	var man backup.Manifest
+
+	restoreGate.Lock()
+	defer restoreGate.Unlock()
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), backupTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		if err := models.Migrate(h.DB); err != nil {
+			done <- err
+			return
+		}
+		var restoreErr error
+		man, restoreErr = backup.Restore(h.DB, h.Storage, zipPath, backup.RestoreOptions{
+			ClearExisting: true,
+		})
+		done <- restoreErr
+	}()
+
+	select {
+	case err := <-done:
+		return man, err
+	case <-ctx.Done():
+		return man, ctx.Err()
+	}
 }
 
 // Download mints a short-lived pre-signed URL so the client pulls the archive

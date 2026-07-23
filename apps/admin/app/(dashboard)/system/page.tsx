@@ -19,6 +19,7 @@ const TILES: SystemTile[] = [
   { href: "/system/performance",   title: "Performance",      description: "Four Google SRE golden signals — latency, traffic, errors, saturation.",   icon: <TrendingUp className="h-5 w-5" /> },
   { href: "/system/security",      title: "Security",         description: "Sentinel summary — banned IPs, rate-limit pressure, recent threats.",      icon: <Shield className="h-5 w-5" /> },
   { href: "/system/jobs",          title: "Background Jobs",  description: "Queue depth, in-flight workers, dead-letter queue.",                       icon: <Database className="h-5 w-5" /> },
+  { href: "/system/backups",       title: "Data & Backup",    description: "Backup & restore database (ZIP). Jadwal otomatis, download, upload restore.", icon: <Database className="h-5 w-5" /> },
   { href: "/system/files",         title: "File Storage",     description: "Browse uploads, manage retention, audit usage.",                            icon: <Upload className="h-5 w-5" /> },
   { href: "/system/cron",          title: "Cron Schedules",   description: "Recurring jobs, next-run times, run history.",                              icon: <Calendar className="h-5 w-5" /> },
   { href: "/system/mail",          title: "Mail Preview",     description: "Email template gallery + recent send log.",                                 icon: <Mail className="h-5 w-5" /> },

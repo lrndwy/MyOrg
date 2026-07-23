@@ -10,8 +10,6 @@ export const CreateEventSchema = z.object({
   startTime: z.string().nullable(),
   endTime: z.string().nullable(),
   allowPermission: z.boolean(),
-  eventType: z.string(),
-  committeeDescription: z.string(),
   status: z.string(),
   version: z.number().int(),
 });
@@ -26,8 +24,6 @@ export const UpdateEventSchema = z.object({
   startTime: z.string().nullable(),
   endTime: z.string().nullable(),
   allowPermission: z.boolean().optional(),
-  eventType: z.string().optional(),
-  committeeDescription: z.string().optional(),
   status: z.string().optional(),
   version: z.number().int().optional(),
 });

@@ -53,6 +53,52 @@ export function useDownloadBackup() {
   });
 }
 
+/** Stream a fresh backup ZIP from the API (no object storage required). */
+export function useExportBackup() {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.get("/api/backups/export", { responseType: "blob" });
+      const blob = response.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `myorg-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+  });
+}
+
+export function useRestoreBackupUpload() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("confirm", "true");
+      const { data } = await apiClient.post("/api/backups/restore", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 30 * 60 * 1000,
+      });
+      return data.data;
+    },
+  });
+}
+
+export function useRestoreBackupById() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await apiClient.post(
+        `/api/backups/${id}/restore`,
+        { confirm: true },
+        { timeout: 30 * 60 * 1000 }
+      );
+      return data.data;
+    },
+  });
+}
+
 export type BackupFrequency = "daily" | "weekly" | "monthly" | "yearly";
 
 export interface BackupSchedule {

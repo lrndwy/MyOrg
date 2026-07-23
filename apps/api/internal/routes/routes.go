@@ -188,7 +188,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 				cfg.GORMStudioUsername: cfg.GORMStudioPassword,
 			})
 		}
-		studio.Mount(r, db, []interface{}{&models.User{}, &models.Upload{}, &models.Division{}, &models.Role{}, &models.Permission{}, &models.RolePermission{}, &models.OrganizationSetting{}, &models.Event{}, &models.Attendance{}, &models.PermissionRequest{}, &models.Violation{}, &models.Recruitment{}, &models.RecruitmentTargetDivision{}, &models.RecruitmentCustomField{}, &models.RecruitmentSubmission{}, &models.LetterCategory{}, &models.Letter{}, &models.Announcement{}, &models.AnnouncementAttachment{}, &models.LetterTemplate{}, &models.FinanceCategory{}, &models.FinanceTransaction{}, &models.EventCommitteeSie{}, &models.EventCommitteeMember{}, &models.EventSubEvent{}, &models.SubEventAttendance{}, /* grit:studio */}, studioCfg)
+		studio.Mount(r, db, []interface{}{&models.User{}, &models.Upload{}, &models.Division{}, &models.Role{}, &models.Permission{}, &models.RolePermission{}, &models.OrganizationSetting{}, &models.Event{}, &models.Attendance{}, &models.PermissionRequest{}, &models.Violation{}, &models.Recruitment{}, &models.RecruitmentTargetDivision{}, &models.RecruitmentCustomField{}, &models.RecruitmentSubmission{}, &models.LetterCategory{}, &models.Letter{}, &models.Announcement{}, &models.AnnouncementAttachment{}, &models.LetterTemplate{}, &models.FinanceCategory{}, &models.FinanceTransaction{}, /* grit:studio */}, studioCfg)
 		log.Println("GORM Studio mounted at /studio")
 	}
 
@@ -350,10 +350,6 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	syncRegistry.Register("letter_templates", &models.LetterTemplate{})
 	syncRegistry.Register("finance_categories", &models.FinanceCategory{})
 	syncRegistry.Register("finance_transactions", &models.FinanceTransaction{})
-	syncRegistry.Register("event_committee_sies", &models.EventCommitteeSie{})
-	syncRegistry.Register("event_committee_members", &models.EventCommitteeMember{})
-	syncRegistry.Register("event_sub_events", &models.EventSubEvent{})
-	syncRegistry.Register("sub_event_attendances", &models.SubEventAttendance{})
 	// grit:sync
 	syncHandler := handlers.NewSyncHandler(db, syncRegistry)
 	// v3.31.68 — shared background CSV import status endpoint
@@ -425,18 +421,6 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		DB: db,
 	}
 	financeTransactionHandler := &handlers.FinanceTransactionHandler{
-		DB: db,
-	}
-	eventCommitteeSieHandler := &handlers.EventCommitteeSieHandler{
-		DB: db,
-	}
-	eventCommitteeMemberHandler := &handlers.EventCommitteeMemberHandler{
-		DB: db,
-	}
-	eventSubEventHandler := &handlers.EventSubEventHandler{
-		DB: db,
-	}
-	subEventAttendanceHandler := &handlers.SubEventAttendanceHandler{
 		DB: db,
 	}
 	// grit:handlers
@@ -821,26 +805,6 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		eventRecapGroup := protected.Group("/events")
 		eventRecapGroup.Use(middleware.RequirePermission(permChecker, "events.view"))
 		eventRecapGroup.GET("/:id/recap", myorgHandler.EventRecap)
-		eventRecapGroup.GET("/:id/committee", myorgHandler.GetEventCommitteeOverview)
-		eventRecapGroup.GET("/:id/sub-events", myorgHandler.ListEventSubEvents)
-		eventRecapGroup.GET("/:id/my-sub-events", myorgHandler.ListMyEventSubEvents)
-
-		subEventView := protected.Group("/sub_events")
-		subEventView.Use(middleware.RequirePermission(permChecker, "events.sub_events.view"))
-		subEventView.GET("/:id/recap", myorgHandler.GetSubEventRecap)
-		protected.GET("/sub_events/:id/my-attendance", myorgHandler.GetMySubEventAttendance)
-
-		subEventSubmit := protected.Group("/sub_events")
-		subEventSubmit.Use(middleware.RequirePermission(permChecker, "sub_events.attendance.submit"))
-		subEventSubmit.POST("/:id/attendance", myorgHandler.SubmitSubEventAttendance)
-
-		subEventManage := protected.Group("/sub_events")
-		subEventManage.Use(middleware.RequirePermission(permChecker, "sub_events.attendance.manage"))
-		subEventManage.PUT("/:id/attendance/:userId", myorgHandler.MarkSubEventAttendance)
-
-		subEventMinutes := protected.Group("/sub_events")
-		subEventMinutes.Use(middleware.RequirePermission(permChecker, "events.sub_events.manage"))
-		subEventMinutes.POST("/:id/minutes", myorgHandler.UploadSubEventMinutes)
 		// Own attendance lookup — any authenticated member can check whether
 		// they already checked in (used to hide the Absen CTA).
 		protected.GET("/events/:id/attendance", myorgHandler.GetMyAttendance)
@@ -909,38 +873,6 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 			financeCategories.GET("/finance_categories/import/template", financeCategoryHandler.Template)
 			financeCategories.DELETE("/finance_categories/:id", financeCategoryHandler.Delete)
 		}
-		protected.GET("/event_committee_sies", eventCommitteeSieHandler.List)
-		protected.GET("/event_committee_sies/export", eventCommitteeSieHandler.Export)
-		protected.POST("/event_committee_sies/import", eventCommitteeSieHandler.Import)
-		protected.GET("/event_committee_sies/import/template", eventCommitteeSieHandler.Template)
-		protected.GET("/event_committee_sies/:id", eventCommitteeSieHandler.GetByID)
-		protected.POST("/event_committee_sies", eventCommitteeSieHandler.Create)
-		protected.PUT("/event_committee_sies/:id", eventCommitteeSieHandler.Update)
-		protected.PATCH("/event_committee_sies/:id", eventCommitteeSieHandler.Patch)
-		protected.GET("/event_committee_members", eventCommitteeMemberHandler.List)
-		protected.GET("/event_committee_members/export", eventCommitteeMemberHandler.Export)
-		protected.POST("/event_committee_members/import", eventCommitteeMemberHandler.Import)
-		protected.GET("/event_committee_members/import/template", eventCommitteeMemberHandler.Template)
-		protected.GET("/event_committee_members/:id", eventCommitteeMemberHandler.GetByID)
-		protected.POST("/event_committee_members", eventCommitteeMemberHandler.Create)
-		protected.PUT("/event_committee_members/:id", eventCommitteeMemberHandler.Update)
-		protected.PATCH("/event_committee_members/:id", eventCommitteeMemberHandler.Patch)
-		protected.GET("/event_sub_events", eventSubEventHandler.List)
-		protected.GET("/event_sub_events/export", eventSubEventHandler.Export)
-		protected.POST("/event_sub_events/import", eventSubEventHandler.Import)
-		protected.GET("/event_sub_events/import/template", eventSubEventHandler.Template)
-		protected.GET("/event_sub_events/:id", eventSubEventHandler.GetByID)
-		protected.POST("/event_sub_events", eventSubEventHandler.Create)
-		protected.PUT("/event_sub_events/:id", eventSubEventHandler.Update)
-		protected.PATCH("/event_sub_events/:id", eventSubEventHandler.Patch)
-		protected.GET("/sub_event_attendances", subEventAttendanceHandler.List)
-		protected.GET("/sub_event_attendances/export", subEventAttendanceHandler.Export)
-		protected.POST("/sub_event_attendances/import", subEventAttendanceHandler.Import)
-		protected.GET("/sub_event_attendances/import/template", subEventAttendanceHandler.Template)
-		protected.GET("/sub_event_attendances/:id", subEventAttendanceHandler.GetByID)
-		protected.POST("/sub_event_attendances", subEventAttendanceHandler.Create)
-		protected.PUT("/sub_event_attendances/:id", subEventAttendanceHandler.Update)
-		protected.PATCH("/sub_event_attendances/:id", subEventAttendanceHandler.Patch)
 		// grit:routes:protected
 	}
 
@@ -1024,6 +956,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// download it via a short-lived pre-signed URL straight from storage.
 		admin.GET("/backups", backupHandler.List)
 		admin.POST("/backups/generate", backupHandler.Generate)
+		admin.GET("/backups/export", backupHandler.Export)
+		admin.POST("/backups/restore", backupHandler.RestoreUpload)
+		admin.POST("/backups/:id/restore", backupHandler.RestoreByID)
 		admin.GET("/backups/:id/download", backupHandler.Download)
 		// Separate path (not /backups/settings) so it doesn't collide with the
 		// /backups/:id wildcard segment in Gin's router.
@@ -1048,10 +983,6 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		admin.DELETE("/announcement_attachments/:id", announcementAttachmentHandler.Delete)
 		admin.DELETE("/letter_templates/:id", letterTemplateHandler.Delete)
 		// finance mutations: permission-gated in protected routes (finance.create/edit/delete/categories)
-		admin.DELETE("/event_committee_sies/:id", eventCommitteeSieHandler.Delete)
-		admin.DELETE("/event_committee_members/:id", eventCommitteeMemberHandler.Delete)
-		admin.DELETE("/event_sub_events/:id", eventSubEventHandler.Delete)
-		admin.DELETE("/sub_event_attendances/:id", subEventAttendanceHandler.Delete)
 		// grit:routes:admin
 	}
 

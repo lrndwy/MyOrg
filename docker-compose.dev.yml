@@ -14,66 +14,63 @@
 # services (keep `expose:`) so only the reverse proxy reaches the containers.
 
 services:
-  api:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    container_name: myorg-api
-    restart: unless-stopped
-    expose:
-      - "8080"
-    ports:
-      - "${API_PORT:-8080}:8080"
-    env_file:
-      - .env
-    # POSTGRES_* credentials come from .env (env_file). Override host/port so the
-    # API hits the postgres service on the Docker network — the container always
-    # listens on 5432 internally; POSTGRES_PORT=5434 in .env is only for host dev.
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:9000}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    networks:
-      - myorg
+  # api:
+  #   build:
+  #     context: ./apps/api
+  #     dockerfile: Dockerfile
+  #   container_name: myorg-api
+  #   restart: unless-stopped
+  #   expose:
+  #     - "8080"
+  #   ports:
+  #     - "${API_PORT:-8080}:8080"
+  #   env_file:
+  #     - .env
+  #   # POSTGRES_* credentials come from .env (env_file). Override host/port so the
+  #   # API hits the postgres service on the Docker network — the container always
+  #   # listens on 5432 internally; POSTGRES_PORT=5434 in .env is only for host dev.
+  #   environment:
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_PORT: "5432"
+  #     REDIS_URL: redis://redis:6379
+  #     MINIO_ENDPOINT: http://minio:9000
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - myorg
 
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
-    container_name: myorg-web
-    restart: unless-stopped
-    expose:
-      - "3000"
-    ports:
-      - "${WEB_PORT:-3000}:3000"
-    networks:
-      - myorg
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/web/Dockerfile
+  #     args:
+  #       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
+  #   container_name: myorg-web
+  #   restart: unless-stopped
+  #   expose:
+  #     - "3000"
+  #   ports:
+  #     - "${WEB_PORT:-3000}:3000"
+  #   networks:
+  #     - myorg
 
-  admin:
-    build:
-      context: .
-      dockerfile: apps/admin/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
-    container_name: myorg-admin
-    restart: unless-stopped
-    expose:
-      - "3000"
-    ports:
-      - "${ADMIN_PORT:-3001}:3000"
-    networks:
-      - myorg
+  # admin:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/admin/Dockerfile
+  #     args:
+  #       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
+  #   container_name: myorg-admin
+  #   restart: unless-stopped
+  #   expose:
+  #     - "3000"
+  #   ports:
+  #     - "${ADMIN_PORT:-3001}:3000"
+  #   networks:
+  #     - myorg
 
   postgres:
     image: postgres:16-alpine

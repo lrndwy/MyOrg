@@ -253,33 +253,5 @@ export const API_ROUTES = {
     UPDATE: (id: number) => `/api/finance_transactions/${id}`,
     DELETE: (id: number) => `/api/finance_transactions/${id}`,
   },
-  EVENT_COMMITTEE_SIES: {
-    LIST: "/api/event_committee_sies",
-    GET: (id: number) => `/api/event_committee_sies/${id}`,
-    CREATE: "/api/event_committee_sies",
-    UPDATE: (id: number) => `/api/event_committee_sies/${id}`,
-    DELETE: (id: number) => `/api/event_committee_sies/${id}`,
-  },
-  EVENT_COMMITTEE_MEMBERS: {
-    LIST: "/api/event_committee_members",
-    GET: (id: number) => `/api/event_committee_members/${id}`,
-    CREATE: "/api/event_committee_members",
-    UPDATE: (id: number) => `/api/event_committee_members/${id}`,
-    DELETE: (id: number) => `/api/event_committee_members/${id}`,
-  },
-  EVENT_SUB_EVENTS: {
-    LIST: "/api/event_sub_events",
-    GET: (id: number) => `/api/event_sub_events/${id}`,
-    CREATE: "/api/event_sub_events",
-    UPDATE: (id: number) => `/api/event_sub_events/${id}`,
-    DELETE: (id: number) => `/api/event_sub_events/${id}`,
-  },
-  SUB_EVENT_ATTENDANCES: {
-    LIST: "/api/sub_event_attendances",
-    GET: (id: number) => `/api/sub_event_attendances/${id}`,
-    CREATE: "/api/sub_event_attendances",
-    UPDATE: (id: number) => `/api/sub_event_attendances/${id}`,
-    DELETE: (id: number) => `/api/sub_event_attendances/${id}`,
-  },
   // grit:api-routes
 } as const;

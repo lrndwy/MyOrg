@@ -185,8 +185,6 @@ func (h *EventHandler) Create(c *gin.Context) {
 		StartTime *timex.FlexTime `json:"start_time"`
 		EndTime *timex.FlexTime `json:"end_time"`
 		AllowPermission bool `json:"allow_permission"`
-		EventType string `json:"event_type"`
-		CommitteeDescription string `json:"committee_description"`
 		Status string `json:"status"` // default upcoming in service if empty
 	}
 
@@ -209,12 +207,7 @@ func (h *EventHandler) Create(c *gin.Context) {
 		StartTime: req.StartTime.Ptr(),
 		EndTime: req.EndTime.Ptr(),
 		AllowPermission: req.AllowPermission,
-		EventType: req.EventType,
-		CommitteeDescription: req.CommitteeDescription,
 		Status: req.Status,
-	}
-	if item.EventType == "" {
-		item.EventType = "general"
 	}
 	if item.Status == "" {
 		item.Status = "upcoming"
@@ -264,8 +257,6 @@ func (h *EventHandler) Update(c *gin.Context) {
 		StartTime *timex.FlexTime `json:"start_time"`
 		EndTime *timex.FlexTime `json:"end_time"`
 		AllowPermission *bool `json:"allow_permission"`
-		EventType string `json:"event_type"`
-		CommitteeDescription string `json:"committee_description"`
 		Status string `json:"status"`
 	}
 
@@ -303,12 +294,6 @@ func (h *EventHandler) Update(c *gin.Context) {
 	}
 	if req.AllowPermission != nil {
 		updates["allow_permission"] = *req.AllowPermission
-	}
-	if req.EventType != "" {
-		updates["event_type"] = req.EventType
-	}
-	if req.CommitteeDescription != "" {
-		updates["committee_description"] = req.CommitteeDescription
 	}
 	if req.Status != "" {
 		updates["status"] = req.Status

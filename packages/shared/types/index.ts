@@ -39,8 +39,4 @@ export type { AnnouncementAttachment } from "./announcement-attachment";
 export type { LetterTemplate } from "./letter-template";
 export type { FinanceCategory } from "./finance-category";
 export type { FinanceTransaction } from "./finance-transaction";
-export type { EventCommitteeSie } from "./event-committee-sie";
-export type { EventCommitteeMember } from "./event-committee-member";
-export type { EventSubEvent } from "./event-sub-event";
-export type { SubEventAttendance } from "./sub-event-attendance";
 // grit:types

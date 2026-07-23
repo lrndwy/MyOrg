@@ -23,6 +23,7 @@ import {
   Globe,
   ExternalLink,
   CreditCard,
+  Database,
 } from "@/lib/icons";
 import type { User } from "@repo/shared/types";
 import { getWebAppUrl } from "@/lib/panel-access";
@@ -55,6 +56,7 @@ const MYORG_NAV = [
 // surface for the broader browse case.
 const SYSTEM_NAV = [
   { href: "/settings/dashboard", label: "Dashboard settings", iconKey: "Settings",    adminOnly: false },
+  { href: "/system/backups",     label: "Data & Backup",    iconKey: "Database",     adminOnly: true },
   { href: "/system/health",       label: "System Health", iconKey: "ActivityIcon", adminOnly: true },
   { href: "/system/performance",  label: "Performance",   iconKey: "TrendingUp",   adminOnly: true },
   { href: "/system/security",     label: "Security",      iconKey: "Shield",       adminOnly: true },
@@ -69,6 +71,7 @@ const INTERNAL_ICON: Record<string, React.ReactNode> = {
   TrendingUp: <TrendingUp className="h-5 w-5" />,
   Shield: <Shield className="h-5 w-5" />,
   CreditCard: <CreditCard className="h-5 w-5" />,
+  Database: <Database className="h-5 w-5" />,
 };
 
 function inferResourceGroup(slug: string): string | null {
@@ -85,10 +88,6 @@ function inferResourceGroup(slug: string): string | null {
     "events",
     "attendances",
     "violations",
-    "event-committee-sies",
-    "event-committee-members",
-    "event-sub-events",
-    "sub-event-attendances",
   ]);
   const AKSES_IZIN = new Set(["permission-requests"]);
   const REKRUTMEN = new Set([

@@ -131,28 +131,4 @@ export {
   type CreateFinanceTransactionInput,
   type UpdateFinanceTransactionInput,
 } from "./finance-transaction";
-export {
-  CreateEventCommitteeSieSchema,
-  UpdateEventCommitteeSieSchema,
-  type CreateEventCommitteeSieInput,
-  type UpdateEventCommitteeSieInput,
-} from "./event-committee-sie";
-export {
-  CreateEventCommitteeMemberSchema,
-  UpdateEventCommitteeMemberSchema,
-  type CreateEventCommitteeMemberInput,
-  type UpdateEventCommitteeMemberInput,
-} from "./event-committee-member";
-export {
-  CreateEventSubEventSchema,
-  UpdateEventSubEventSchema,
-  type CreateEventSubEventInput,
-  type UpdateEventSubEventInput,
-} from "./event-sub-event";
-export {
-  CreateSubEventAttendanceSchema,
-  UpdateSubEventAttendanceSchema,
-  type CreateSubEventAttendanceInput,
-  type UpdateSubEventAttendanceInput,
-} from "./sub-event-attendance";
 // grit:schemas

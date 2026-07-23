@@ -252,50 +252,6 @@ func SubmitSharedForm(db *gorm.DB, resourceName string, fields map[string]interf
 		}
 		return &SharedResourceSubmission{ID: item.ID, Label: item.ID}, nil
 
-	case "EventCommitteeSie":
-		item := &models.EventCommitteeSie{}
-		body, _ := json.Marshal(fields)
-		if err := json.Unmarshal(body, item); err != nil {
-			return nil, fmt.Errorf("decoding EventCommitteeSie body: %w", err)
-		}
-		if err := db.Create(item).Error; err != nil {
-			return nil, fmt.Errorf("creating EventCommitteeSie: %w", err)
-		}
-		return &SharedResourceSubmission{ID: item.ID, Label: item.Name}, nil
-
-	case "EventCommitteeMember":
-		item := &models.EventCommitteeMember{}
-		body, _ := json.Marshal(fields)
-		if err := json.Unmarshal(body, item); err != nil {
-			return nil, fmt.Errorf("decoding EventCommitteeMember body: %w", err)
-		}
-		if err := db.Create(item).Error; err != nil {
-			return nil, fmt.Errorf("creating EventCommitteeMember: %w", err)
-		}
-		return &SharedResourceSubmission{ID: item.ID, Label: item.ID}, nil
-
-	case "EventSubEvent":
-		item := &models.EventSubEvent{}
-		body, _ := json.Marshal(fields)
-		if err := json.Unmarshal(body, item); err != nil {
-			return nil, fmt.Errorf("decoding EventSubEvent body: %w", err)
-		}
-		if err := db.Create(item).Error; err != nil {
-			return nil, fmt.Errorf("creating EventSubEvent: %w", err)
-		}
-		return &SharedResourceSubmission{ID: item.ID, Label: item.Title}, nil
-
-	case "SubEventAttendance":
-		item := &models.SubEventAttendance{}
-		body, _ := json.Marshal(fields)
-		if err := json.Unmarshal(body, item); err != nil {
-			return nil, fmt.Errorf("decoding SubEventAttendance body: %w", err)
-		}
-		if err := db.Create(item).Error; err != nil {
-			return nil, fmt.Errorf("creating SubEventAttendance: %w", err)
-		}
-		return &SharedResourceSubmission{ID: item.ID, Label: item.ID}, nil
-
 	// grit:form-share:dispatch
 	default:
 		return nil, fmt.Errorf("public submission disabled for %q (no dispatch case registered)", resourceName)
@@ -368,14 +324,6 @@ func RegisteredResources() []string {
 
 		"FinanceTransaction",
 
-		"EventCommitteeSie",
-
-		"EventCommitteeMember",
-
-		"EventSubEvent",
-
-		"SubEventAttendance",
-
 		// grit:form-share:registered
 	}
 }
@@ -446,18 +394,6 @@ func PublicFields(resourceName string) []PublicFieldInfo {
 
 	case "FinanceTransaction":
 		return reflectPublicFields(&models.FinanceTransaction{})
-
-	case "EventCommitteeSie":
-		return reflectPublicFields(&models.EventCommitteeSie{})
-
-	case "EventCommitteeMember":
-		return reflectPublicFields(&models.EventCommitteeMember{})
-
-	case "EventSubEvent":
-		return reflectPublicFields(&models.EventSubEvent{})
-
-	case "SubEventAttendance":
-		return reflectPublicFields(&models.SubEventAttendance{})
 
 	// grit:form-share:fields
 	default:

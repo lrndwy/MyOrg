@@ -43,44 +43,7 @@ type Manifest struct {
 	Tables      []string       `json:"tables"`
 	RowCounts   map[string]int `json:"row_counts"`
 	TotalRows   int            `json:"total_rows"`
-}
-
-// Tables returns every registered model's table name in registration order —
-// parents before children, which is the order dump.sql must INSERT in for the
-// foreign keys to hold.
-//
-// The list is derived from models.Models(), NEVER from user input, so a table
-// name can't be injected into the raw SQL below. It also means every
-// `grit generate resource` is automatically included in the next backup.
-func Tables(db *gorm.DB) ([]string, error) {
-	var out []string
-	seen := map[string]bool{}
-	// joinTables are collected in a second bucket so they sort AFTER their
-	// owning models — the m2m rows reference both sides, so both parent tables
-	// must be inserted first on restore.
-	var joinTables []string
-	for _, m := range models.Models() {
-		stmt := &gorm.Statement{DB: db}
-		if err := stmt.Parse(m); err != nil {
-			return nil, fmt.Errorf("parsing model %T: %w", m, err)
-		}
-		if t := stmt.Schema.Table; t != "" && !seen[t] {
-			seen[t] = true
-			out = append(out, t)
-		}
-		// many_to_many fields create an implicit join table that is NOT in
-		// models.Models(); without this its rows are silently dropped from
-		// every backup (the relationship data vanishes on restore).
-		for _, rel := range stmt.Schema.Relationships.Relations {
-			if rel.JoinTable != nil {
-				if t := rel.JoinTable.Table; t != "" && !seen[t] {
-					seen[t] = true
-					joinTables = append(joinTables, t)
-				}
-			}
-		}
-	}
-	return append(out, joinTables...), nil
+	FileCount   int            `json:"file_count,omitempty"`
 }
 
 // streamTable reads one table row-at-a-time with raw database/sql, writing each
@@ -218,9 +181,11 @@ func quote(s string) string {
 
 // ArchiveTo streams the backup ZIP to w, holding one row in memory at a time:
 //
-//	tables/<table>.csv — one per table, opens in any spreadsheet
-//	dump.sql           — INSERTs parent->child, wrapped in BEGIN/COMMIT
-//	metadata.json      — row counts, for verifying a restore
+//	tables/<table>.csv   — one per table, opens in any spreadsheet
+//	dump.sql             — INSERTs parent->child, wrapped in BEGIN/COMMIT
+//	files/<storage-key>  — uploaded objects referenced by the database
+//	files-manifest.json  — list of file keys in the archive
+//	metadata.json        — row counts, for verifying a restore
 //
 // A zip.Writer only allows one entry open at a time, but dump.sql spans every
 // table while the CSV entries are per-table. So the SQL is streamed to a temp
@@ -289,6 +254,17 @@ func (s *Service) ArchiveTo(ctx context.Context, w io.Writer) (Manifest, error) 
 	}
 	if _, err := io.Copy(dw, dumpFile); err != nil {
 		return man, err
+	}
+
+	if s.Storage != nil {
+		fileKeys, err := collectStorageKeys(s.DB, s.Storage)
+		if err != nil {
+			return man, err
+		}
+		man.FileCount, err = s.archiveFiles(ctx, zw, fileKeys)
+		if err != nil {
+			return man, err
+		}
 	}
 
 	man.Tables = tables

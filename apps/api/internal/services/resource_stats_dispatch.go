@@ -118,18 +118,6 @@ func ComputeResourceStats(db *gorm.DB, resourceName string, filter ResourceStats
 	case "finance_transactions":
 		return reflectiveResourceStats(db, resourceName, &models.FinanceTransaction{}, filter)
 
-	case "event_committee_sies":
-		return reflectiveResourceStats(db, resourceName, &models.EventCommitteeSie{}, filter)
-
-	case "event_committee_members":
-		return reflectiveResourceStats(db, resourceName, &models.EventCommitteeMember{}, filter)
-
-	case "event_sub_events":
-		return reflectiveResourceStats(db, resourceName, &models.EventSubEvent{}, filter)
-
-	case "sub_event_attendances":
-		return reflectiveResourceStats(db, resourceName, &models.SubEventAttendance{}, filter)
-
 	// grit:resource-stats:dispatch
 	default:
 		return nil, fmt.Errorf("dashboard stats not registered for %q", resourceName)

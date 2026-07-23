@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -104,16 +105,36 @@ func New(cfg config.StorageConfig) (*Storage, error) {
 
 // Upload stores a file in the bucket at the given key.
 func (s *Storage) Upload(ctx context.Context, key string, reader io.Reader, contentType string) error {
-	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+	body, err := seekableBody(reader)
+	if err != nil {
+		return fmt.Errorf("reading body for %q: %w", key, err)
+	}
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
 		Key:         aws.String(key),
-		Body:        reader,
+		Body:        body,
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
 		return fmt.Errorf("uploading %q: %w", key, err)
 	}
 	return nil
+}
+
+// seekableBody returns a ReadSeeker for PutObject. The AWS SDK computes a
+// payload hash and must rewind the body; zip archive entries and some HTTP
+// bodies are not seekable, so we buffer those into memory.
+func seekableBody(r io.Reader) (io.ReadSeeker, error) {
+	if rs, ok := r.(io.ReadSeeker); ok {
+		if _, err := rs.Seek(0, io.SeekStart); err == nil {
+			return rs, nil
+		}
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(data), nil
 }
 
 // Download retrieves a file from the bucket.
@@ -142,7 +163,11 @@ func (s *Storage) Delete(ctx context.Context, key string) error {
 
 // GetURL returns the public URL for a stored file.
 func (s *Storage) GetURL(key string) string {
-	endpoint := strings.TrimRight(s.cfg.Endpoint, "/")
+	endpoint := s.cfg.PublicEndpoint
+	if endpoint == "" {
+		endpoint = s.cfg.Endpoint
+	}
+	endpoint = strings.TrimRight(endpoint, "/")
 	// Encode each path segment individually to preserve forward slashes
 	segments := strings.Split(key, "/")
 	for i, seg := range segments {

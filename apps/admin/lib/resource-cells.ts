@@ -51,11 +51,6 @@ export function userLabel(
   return userLabelFrom(row[key] as UserLike);
 }
 
-export function subEventTitle(row: Record<string, unknown>, key = "sub_event"): string {
-  const se = row[key] as { title?: string } | null | undefined;
-  return se?.title?.trim() || "—";
-}
-
 export function relatedName(
   row: Record<string, unknown>,
   key: string

@@ -20,10 +20,6 @@ import { announcementResource } from "./announcements";
 import { letterTemplateResource } from "./letter-templates";
 import { financeCategoryResource } from "./finance-categories";
 import { financeTransactionResource } from "./finance-transactions";
-import { eventCommitteeSieResource } from "./event-committee-sies";
-import { eventCommitteeMemberResource } from "./event-committee-members";
-import { eventSubEventResource } from "./event-sub-events";
-import { subEventAttendanceResource } from "./sub-event-attendances";
 // grit:resources
 
 import type { ResourceDefinition } from "@/lib/resource";
@@ -48,10 +44,6 @@ export const resources: ResourceDefinition[] = [
   letterTemplateResource,
   financeCategoryResource,
   financeTransactionResource,
-  eventCommitteeSieResource,
-  eventCommitteeMemberResource,
-  eventSubEventResource,
-  subEventAttendanceResource,
   // grit:resource-list
 ];
 

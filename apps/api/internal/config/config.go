@@ -12,12 +12,13 @@ import (
 
 // StorageConfig holds credentials for a single S3-compatible provider.
 type StorageConfig struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	Region    string
-	UseSSL    bool
+	Endpoint       string // SDK / server-side access (may be Docker service name)
+	PublicEndpoint string // Browser-facing base URL for GetURL; empty = use Endpoint
+	AccessKey      string
+	SecretKey      string
+	Bucket         string
+	Region         string
+	UseSSL         bool
 }
 
 // Config holds all application configuration.
@@ -257,12 +258,13 @@ func resolveStorage(driver string) StorageConfig {
 		}
 	default: // minio
 		return StorageConfig{
-			Endpoint:  getEnv("MINIO_ENDPOINT", "http://localhost:9002"),
-			AccessKey: getEnv("MINIO_ACCESS_KEY", "minioadmin"),
-			SecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
-			Bucket:    getEnv("MINIO_BUCKET", "uploads"),
-			Region:    getEnv("MINIO_REGION", "us-east-1"),
-			UseSSL:    getEnv("MINIO_USE_SSL", "false") == "true",
+			Endpoint:       getEnv("MINIO_ENDPOINT", "http://localhost:9000"),
+			PublicEndpoint: getEnv("MINIO_PUBLIC_URL", ""),
+			AccessKey:      getEnv("MINIO_ACCESS_KEY", "minioadmin"),
+			SecretKey:      getEnv("MINIO_SECRET_KEY", "minioadmin"),
+			Bucket:         getEnv("MINIO_BUCKET", "uploads"),
+			Region:         getEnv("MINIO_REGION", "us-east-1"),
+			UseSSL:         getEnv("MINIO_USE_SSL", "false") == "true",
 		}
 	}
 }

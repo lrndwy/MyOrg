@@ -62,31 +62,6 @@ grit generate resource Event --fields "title:string,description:text,division:be
 ```
 `division` nullable = General event (lihat PRD §3.1).
 
-**Patch manual pasca-generate** (Event Kepanitiaan):
-- `event_type`: `general` | `kepanitiaan` (default `general`)
-- `committee_description`: text opsional
-
-### 2.5.1 Event Kepanitiaan (Sie, Sub Event, Absensi Sub Event)
-
-```bash
-grit generate resource EventCommitteeSie --fields "event:belongs_to:Event,name:string,description:text:optional,orderIndex:int"
-grit generate resource EventCommitteeMember --fields "sie:belongs_to:EventCommitteeSie,user:belongs_to:User,role:string"
-grit generate resource EventSubEvent --fields "event:belongs_to:Event,sie:belongs_to:EventCommitteeSie:optional,title:string,description:text:optional,location:string,startTime:datetime,endTime:datetime,ketuaPelaksana:belongs_to:User,attendanceMode:string,minutesUrl:string:optional,status:string"
-grit generate resource SubEventAttendance --fields "subEvent:belongs_to:EventSubEvent,user:belongs_to:User,status:string,selfieUrl:string:optional,signatureUrl:string:optional,checkedInAt:datetime:optional,markedBy:belongs_to:User:optional"
-```
-
-- **Sie** = unit kerja kepanitiaan per event (bukan `Division` organisasi).
-- **`event_committee_members.role`:** `ketua_sie` | `anggota`; unique index `(sie_id, user_id)` manual.
-- **`event_sub_events.attendance_mode`:** `selfie` | `manual`; `minutes_url` = notulensi rapat.
-- **`sub_event_attendances`:** unique index `(sub_event_id, user_id)` manual.
-- Hanya event `event_type = kepanitiaan` yang boleh punya Sie/Sub Event (validasi service).
-
-**Permission tambahan:** `events.committee.manage`, `events.sub_events.view`, `events.sub_events.manage`, `sub_events.attendance.submit`, `sub_events.attendance.manage`.
-
-**Endpoint kustom:** lihat §3.1 (committee overview, sub-event recap, absensi, upload notulensi).
-
-**Cron:** `sub_event_status_cron.go` — transisi `upcoming → ongoing → finished` untuk Sub Event.
-
 ### 2.6 Attendance
 ```bash
 grit generate resource Attendance --fields "event:belongs_to:Event,user:belongs_to:User,status:string,selfieUrl:string:optional,signatureUrl:string:optional,checkedInAt:datetime:optional"
@@ -167,18 +142,16 @@ Beberapa endpoint di PRD §5 bersifat publik (recruitment form, branding setting
 | `PUT /settings` | `settings.manage` | Multipart logo/icon |
 | `GET /me`, `PUT /me`, `PUT /me/password` | JWT | Profile user |
 | `GET /events/:id/recap` | `events.view` | Aggregasi kehadiran + export |
-| `GET /events/:id/committee` | `events.view` | Overview kepanitiaan (Sie, anggota, Sub Event) |
-| `GET /events/:id/sub-events` | `events.sub_events.view` | List Sub Event (filter sie) |
-| `GET /sub_events/:id/recap` | `events.sub_events.view` | Rekap absensi Sub Event |
-| `POST /sub_events/:id/attendance` | `sub_events.attendance.submit` | Selfie check-in Sub Event |
-| `PUT /sub_events/:id/attendance/:userId` | `sub_events.attendance.manage` | Tandai hadir manual |
-| `POST /sub_events/:id/minutes` | `events.sub_events.manage` | Upload notulensi Sub Event |
 | `POST /events/:id/attendance` | `attendance.submit` | Selfie + signature |
 | `GET/PUT /attendance/permission-requests/*` | `attendance.approve` | Approval flow |
 | `POST /permission-requests`, `GET /permission-requests/me` | `permission.submit` | Ajukan & riwayat izin |
 | `GET /users/import/template`, `POST /users/import` | `users.import` | Bulk import |
 | `GET /public/recruitment/:slug` | Public | Form publik |
 | `POST /public/recruitment/:slug/submit` | Public | Submission tanpa login |
+| `GET /backups`, `POST /backups/generate`, `GET /backups/export` | ADMIN | Backup DB penuh → ZIP |
+| `POST /backups/restore`, `POST /backups/:id/restore` | ADMIN | Restore dari upload ZIP / backup tersimpan |
+| `GET /backups/:id/download` | ADMIN | Pre-signed URL arsip di object storage |
+| `GET/PUT /backup-settings` | ADMIN | Jadwal backup otomatis |
 
 ## 4. Model Role & Permission (Custom RBAC di atas Grit Auth)
 
@@ -208,7 +181,7 @@ events.POST("", RequirePermission("events.create"), eventHandler.Create)
 attendance.PUT("/permission-requests/:id", RequirePermission("attendance.approve"), attendanceHandler.ReviewPermission)
 ```
 
-Daftar awal permission code mengikuti modul PRD: `settings.manage`, `users.view/create/edit/delete/import`, `roles.view/create/edit/delete`, `events.view/create/edit/delete`, `events.committee.manage`, `events.sub_events.view`, `events.sub_events.manage`, `sub_events.attendance.submit`, `sub_events.attendance.manage`, `attendance.submit/approve`, `divisions.view/create/edit/delete`, `permission.submit`, `violations.view/manage`, `recruitment.manage`, `letters.view/manage`, `announcement.create`, `finance.view/create/edit/delete/categories/manage`. Seed awal ada di `grit seed` (lihat §6). Role sistem **Bendahara** otomatis mendapat semua permission modul `finance.*`.
+Daftar awal permission code mengikuti modul PRD: `settings.manage`, `users.view/create/edit/delete/import`, `roles.view/create/edit/delete`, `events.view/create/edit/delete`, `attendance.submit/approve`, `divisions.view/create/edit/delete`, `permission.submit`, `violations.view/manage`, `recruitment.manage`, `letters.view/manage`, `announcement.create`, `finance.view/create/edit/delete/categories/manage`. Seed awal ada di `grit seed` (lihat §6). Role sistem **Bendahara** otomatis mendapat semua permission modul `finance.*`.
 
 ## 5. Business Logic Kunci (di Service Layer)
 
