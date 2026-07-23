@@ -77,6 +77,18 @@ Then fill in your keys for:
 
 No Docker needed — just your API keys and ``go run``.
 
+## Production — seed admin pertama
+
+Setelah deploy DB kosong, buat admin + permissions awal:
+
+```bash
+# Di .env server: APP_ENV=production + SEED_ADMIN_PASSWORD=<password-kuat>
+grit migrate
+grit seed
+```
+
+Login: username **`admin`**, password dari `SEED_ADMIN_PASSWORD`. Detail lengkap (Docker, troubleshooting, checklist): **[docs/PRODUCTION-ADMIN-SEED.md](docs/PRODUCTION-ADMIN-SEED.md)**.
+
 ## Tech Stack
 
 - **Backend:** Go + Gin + GORM

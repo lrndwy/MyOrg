@@ -260,6 +260,8 @@ Seed awal mencakup:
 - Contoh `letter_categories` (`UND`, `SK`).
 - Divisi demo + admin user terhubung ke Role Admin + divisi.
 
+**Production:** wajib set `SEED_ADMIN_PASSWORD` + `APP_ENV=production` sebelum seed; password dev `admin123` ditolak. User demo tidak di-seed. Panduan lengkap: [`docs/PRODUCTION-ADMIN-SEED.md`](docs/PRODUCTION-ADMIN-SEED.md).
+
 ## 7. Penyesuaian Manual di Luar Generator Default
 
 Beberapa hal tidak bisa full-generate dan perlu ditulis manual, didokumentasikan di sini agar tidak dianggap "bug generator":
