@@ -24,11 +24,11 @@ function isLoopbackHost(hostname: string): boolean {
 /**
  * Resolve a NEXT_PUBLIC_* app URL for cross-app navigation.
  *
- * NEXT_PUBLIC_* values are baked at build time and often still say
- * localhost after a server deploy. When the browser is already on a
- * public IP/domain, rewrite the configured localhost host to the
- * current hostname (keeping the configured port) so Web ↔ Admin links
- * stay on the same machine the user reached.
+ * NEXT_PUBLIC_* values are baked at build time. When they already point at a
+ * public hostname, use them as-is. The localhost rewrite below only applies to
+ * the IP:port dev deploy pattern (browser on e.g. 203.0.113.10:3005 with
+ * baked localhost:3001) — not HTTPS subdomain production (himatris / admin-* /
+ * api-*), which must bake the correct URLs at build time.
  */
 export function resolvePublicAppUrl(
   configured: string | undefined,
@@ -40,9 +40,18 @@ export function resolvePublicAppUrl(
     if (typeof window === "undefined") {
       return cfg.origin;
     }
-    if (isLoopbackHost(cfg.hostname) && !isLoopbackHost(window.location.hostname)) {
-      cfg.protocol = window.location.protocol;
-      cfg.hostname = window.location.hostname;
+    if (!isLoopbackHost(cfg.hostname)) {
+      return cfg.origin;
+    }
+    if (!isLoopbackHost(window.location.hostname)) {
+      const browserPort = window.location.port;
+      const cfgPort = cfg.port || (cfg.protocol === "https:" ? "443" : "80");
+      const devPorts = new Set(["3000", "3001", "3005"]);
+      if (devPorts.has(browserPort) && devPorts.has(cfgPort)) {
+        cfg.protocol = window.location.protocol;
+        cfg.hostname = window.location.hostname;
+        return cfg.origin;
+      }
     }
     return cfg.origin;
   } catch {

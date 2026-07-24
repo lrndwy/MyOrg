@@ -65,7 +65,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// Bearer (mobile/desktop) flows pass through with no header required.
 	// Pairs with services.AuthService.SetAuthCookies (the HttpOnly cookie
 	// path documented in /docs/backend/authentication).
-	r.Use(middleware.AutoCSRF())
+	r.Use(middleware.AutoCSRF(cfg.AuthCookieDomain))
 
 	// Idempotent retries for unsafe methods. Activates only when the client
 	// sends an Idempotency-Key header; cached for 24h on 2xx responses.
@@ -258,6 +258,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		Secret:        cfg.JWTSecret,
 		AccessExpiry:  cfg.JWTAccessExpiry,
 		RefreshExpiry: cfg.JWTRefreshExpiry,
+		CookieDomain:  cfg.AuthCookieDomain,
 	}
 
 	// Handlers

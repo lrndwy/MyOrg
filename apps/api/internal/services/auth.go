@@ -17,6 +17,7 @@ type AuthService struct {
 	Secret        string
 	AccessExpiry  time.Duration
 	RefreshExpiry time.Duration
+	CookieDomain  string
 }
 
 // TokenPair holds access and refresh tokens.
@@ -122,8 +123,8 @@ func (s *AuthService) SetAuthCookies(c *gin.Context, pair *TokenPair) {
 	refreshSeconds := int(s.RefreshExpiry / time.Second)
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("grit_access", pair.AccessToken, accessSeconds, "/", "", secure, true)
-	c.SetCookie("grit_refresh", pair.RefreshToken, refreshSeconds, "/api/auth", "", secure, true)
+	c.SetCookie("grit_access", pair.AccessToken, accessSeconds, "/", s.CookieDomain, secure, true)
+	c.SetCookie("grit_refresh", pair.RefreshToken, refreshSeconds, "/api/auth", s.CookieDomain, secure, true)
 }
 
 // ClearAuthCookies expires both auth cookies. Call this from the Logout
@@ -132,8 +133,8 @@ func (s *AuthService) SetAuthCookies(c *gin.Context, pair *TokenPair) {
 func (s *AuthService) ClearAuthCookies(c *gin.Context) {
 	secure := isRequestHTTPS(c)
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("grit_access", "", -1, "/", "", secure, true)
-	c.SetCookie("grit_refresh", "", -1, "/api/auth", "", secure, true)
+	c.SetCookie("grit_access", "", -1, "/", s.CookieDomain, secure, true)
+	c.SetCookie("grit_refresh", "", -1, "/api/auth", s.CookieDomain, secure, true)
 }
 
 // isRequestHTTPS returns true when the request is on HTTPS (directly or

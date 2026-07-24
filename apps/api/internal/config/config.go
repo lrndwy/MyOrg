@@ -33,6 +33,10 @@ type Config struct {
 	JWTAccessExpiry  time.Duration
 	JWTRefreshExpiry time.Duration
 
+	// AuthCookieDomain sets Domain on grit_* cookies (e.g. ".heroflow.my.id")
+	// so web/admin/API subdomains share session + CSRF double-submit token.
+	AuthCookieDomain string
+
 	RedisURL string
 
 	// Storage
@@ -107,6 +111,7 @@ func Load() (*Config, error) {
 		DatabaseURL: resolveDatabaseURL(),
 		JWTSecret:   getEnv("JWT_SECRET", ""),
 		RedisURL:    getEnv("REDIS_URL", "redis://localhost:6380"),
+		AuthCookieDomain: strings.TrimSpace(getEnv("AUTH_COOKIE_DOMAIN", "")),
 
 		StorageDriver: storageDriver,
 		Storage:       resolveStorage(storageDriver),

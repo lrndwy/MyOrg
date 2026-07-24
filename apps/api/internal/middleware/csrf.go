@@ -86,7 +86,7 @@ func newCSRFToken() (string, error) {
 //   - POST/PUT/PATCH/DELETE with cookie   → require matching X-CSRF-Token.
 //   - POST/PUT/PATCH/DELETE bearer-only   → no-op (header auth is CSRF-safe).
 //   - Login / register / refresh routes   → skipped (they MINT the cookie).
-func AutoCSRF() gin.HandlerFunc {
+func AutoCSRF(cookieDomain string) gin.HandlerFunc {
 	const (
 		csrfCookie   = "grit_csrf"
 		csrfHeader   = "X-CSRF-Token"
@@ -115,7 +115,8 @@ func AutoCSRF() gin.HandlerFunc {
 				token, gerr := newCSRFToken()
 				if gerr == nil {
 					c.SetSameSite(http.SameSiteLaxMode)
-					c.SetCookie(csrfCookie, token, 86400, "/", "", c.Request.TLS != nil, false)
+					secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+					c.SetCookie(csrfCookie, token, 86400, "/", cookieDomain, secure, false)
 				}
 			}
 			c.Next()
