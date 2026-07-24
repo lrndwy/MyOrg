@@ -45,10 +45,8 @@ func CSRF() gin.HandlerFunc {
 		}
 
 		// Unsafe method — require matching header + cookie.
-		cookieToken, _ := c.Cookie(cookieName)
 		headerToken := c.GetHeader(headerName)
-		if cookieToken == "" || headerToken == "" ||
-			subtle.ConstantTimeCompare([]byte(cookieToken), []byte(headerToken)) != 1 {
+		if !csrfHeaderMatchesCookie(c, headerToken) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": gin.H{
 					"code":    "CSRF_INVALID",
@@ -71,6 +69,25 @@ func newCSRFToken() (string, error) {
 
 const csrfCookieName = "grit_csrf"
 
+// csrfHeaderMatchesCookie reports whether headerToken matches any grit_csrf
+// cookie on the request. Browsers may send duplicate names after migrating
+// to AUTH_COOKIE_DOMAIN (host-only + parent-domain); net/http Cookie()
+// returns only the first, which can disagree with the token the SPA read.
+func csrfHeaderMatchesCookie(c *gin.Context, headerToken string) bool {
+	if headerToken == "" {
+		return false
+	}
+	for _, cookie := range c.Request.Cookies() {
+		if cookie.Name != csrfCookieName {
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(headerToken)) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
 // IssueCSRFCookie writes the double-submit CSRF cookie. When force is false
 // and a token already exists, the existing value is returned unchanged.
 // Call with force=true after login/refresh so cross-subdomain SPAs can mutate
@@ -87,6 +104,11 @@ func IssueCSRFCookie(c *gin.Context, cookieDomain string, force bool) (string, e
 	}
 	c.SetSameSite(http.SameSiteLaxMode)
 	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	// Drop a legacy host-only grit_csrf so cross-subdomain SPAs don't end up
+	// with two cookies and a header/cookie mismatch on the next mutation.
+	if cookieDomain != "" {
+		c.SetCookie(csrfCookieName, "", -1, "/", "", secure, false)
+	}
 	c.SetCookie(csrfCookieName, token, 86400, "/", cookieDomain, secure, false)
 	return token, nil
 }
@@ -164,10 +186,8 @@ func AutoCSRF(cookieDomain string) gin.HandlerFunc {
 		}
 
 		// Cookie-authenticated mutation: require the double-submit token.
-		cookieToken, _ := c.Cookie(csrfCookie)
 		headerToken := c.GetHeader(csrfHeader)
-		if cookieToken == "" || headerToken == "" ||
-			subtle.ConstantTimeCompare([]byte(cookieToken), []byte(headerToken)) != 1 {
+		if !csrfHeaderMatchesCookie(c, headerToken) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": gin.H{
 					"code":    "CSRF_INVALID",

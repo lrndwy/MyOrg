@@ -46,7 +46,9 @@ Setelah deploy versi terbaru: login/register/refresh juga **langsung** meng-set 
 
 ### Upload file 403 (CSRF_INVALID)
 
-Penyebab umum: cookie CSRF belum ada setelah login cross-subdomain, atau upload multipart memakai header `Content-Type: multipart/form-data` manual (tanpa boundary). Pastikan `AUTH_COOKIE_DOMAIN` benar, rebuild API + admin, login ulang, lalu coba upload lagi.
+Penyebab umum: cookie CSRF belum ada setelah login cross-subdomain, cookie `grit_csrf` ganda (host-only lama + `.heroflow.my.id`), atau upload multipart memakai header `Content-Type: multipart/form-data` manual (tanpa boundary).
+
+Pastikan `AUTH_COOKIE_DOMAIN=.heroflow.my.id` di env API, rebuild API + admin + web, login ulang, lalu coba upload lagi. Versi terbaru mem-bootstrap CSRF lewat `GET /api/auth/csrf` sebelum POST pertama di subdomain berbeda.
 
 ### API masih `localhost:8080` di browser
 

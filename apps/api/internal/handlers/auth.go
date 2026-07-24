@@ -41,7 +41,9 @@ func (h *AuthHandler) setSessionCookies(c *gin.Context, tokens *services.TokenPa
 // Safe to call before the first mutation — returns the token in JSON and
 // sets the grit_csrf cookie when missing.
 func (h *AuthHandler) CSRFToken(c *gin.Context) {
-	token, err := middleware.IssueCSRFCookie(c, h.Config.AuthCookieDomain, false)
+	// Always rotate so the JSON body and Set-Cookie stay in sync for
+	// cross-subdomain SPAs that cannot rely on document.cookie alone.
+	token, err := middleware.IssueCSRFCookie(c, h.Config.AuthCookieDomain, true)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{

@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getWebAppUrl } from "@/lib/panel-access";
 import {
-  fetchCsrfToken,
+  ensureCsrfToken,
   getCachedCsrfToken,
   rememberCsrfToken,
 } from "@repo/shared/csrf";
@@ -101,9 +101,9 @@ apiClient.interceptors.request.use(async (config) => {
     method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
 
   if (unsafe && config.headers) {
-    let token = getCachedCsrfToken();
+    let token = getCachedCsrfToken(API_URL);
     if (!token) {
-      token = await fetchCsrfToken(API_URL);
+      token = await ensureCsrfToken(API_URL);
     }
     if (token) {
       config.headers["X-CSRF-Token"] = token;
@@ -162,7 +162,7 @@ apiClient.interceptors.response.use(
       if (code === "CSRF_INVALID") {
         originalRequest._csrfRetry = true;
         rememberCsrfToken(null);
-        const token = await fetchCsrfToken(API_URL);
+        const token = await ensureCsrfToken(API_URL, { force: true });
         if (token && originalRequest.headers) {
           originalRequest.headers["X-CSRF-Token"] = token;
         }
