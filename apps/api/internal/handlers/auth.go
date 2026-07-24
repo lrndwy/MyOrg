@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"myorg/apps/api/internal/config"
+	"myorg/apps/api/internal/middleware"
 	"myorg/apps/api/internal/models"
 	"myorg/apps/api/internal/services"
 	"myorg/apps/api/internal/totp"
@@ -25,6 +26,36 @@ type AuthHandler struct {
 	DB          *gorm.DB
 	AuthService *services.AuthService
 	Config      *config.Config
+}
+
+// setSessionCookies writes auth + CSRF cookies for browser clients. Native
+// clients still use the bearer tokens in the JSON body; they ignore cookies.
+func (h *AuthHandler) setSessionCookies(c *gin.Context, tokens *services.TokenPair) {
+	h.AuthService.SetAuthCookies(c, tokens)
+	if _, err := middleware.IssueCSRFCookie(c, h.Config.AuthCookieDomain, true); err != nil {
+		log.Printf("auth: issuing CSRF cookie: %v", err)
+	}
+}
+
+// CSRFToken bootstraps the double-submit token for cross-subdomain SPAs.
+// Safe to call before the first mutation — returns the token in JSON and
+// sets the grit_csrf cookie when missing.
+func (h *AuthHandler) CSRFToken(c *gin.Context) {
+	token, err := middleware.IssueCSRFCookie(c, h.Config.AuthCookieDomain, false)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"code":    "CSRF_ERROR",
+				"message": "Failed to issue CSRF token",
+			},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"csrf_token": token,
+		},
+	})
 }
 
 type registerRequest struct {
@@ -128,7 +159,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// Set HttpOnly auth cookies for browser clients.
-	h.AuthService.SetAuthCookies(c, tokens)
+	h.setSessionCookies(c, tokens)
 
 	// v3.30.1: emit a semantic activity row so /system/activity reflects
 	// the signup. Non-blocking — a logging failure won't fail the
@@ -280,7 +311,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Set HttpOnly auth cookies for browser clients. Native mobile/desktop
 	// clients ignore them and continue to use the Bearer header from the
 	// tokens object below — both flows work.
-	h.AuthService.SetAuthCookies(c, tokens)
+	h.setSessionCookies(c, tokens)
 
 	// v3.30.1: successful sign-in lands in /system/activity at info
 	// severity. IP + user-agent come from the request context inside
@@ -368,7 +399,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	// Refresh the HttpOnly cookies so the new access token lands in the
 	// browser without any JS handling. The bearer JSON path is unchanged
 	// for native clients.
-	h.AuthService.SetAuthCookies(c, tokens)
+	h.setSessionCookies(c, tokens)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
@@ -609,7 +640,7 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 	// Set HttpOnly auth cookies BEFORE redirecting so the browser stores
 	// them as part of this same response. The callback page then just
 	// navigates — no tokens in URL, no tokens in JS, no XSS exposure.
-	h.AuthService.SetAuthCookies(c, tokens)
+	h.setSessionCookies(c, tokens)
 
 	// Redirect to frontend callback. No query params — tokens travel as
 	// HttpOnly Set-Cookie headers on this 307 response.

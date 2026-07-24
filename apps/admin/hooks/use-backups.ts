@@ -78,7 +78,6 @@ export function useRestoreBackupUpload() {
       form.append("file", file);
       form.append("confirm", "true");
       const { data } = await apiClient.post("/api/backups/restore", form, {
-        headers: { "Content-Type": "multipart/form-data" },
         timeout: 30 * 60 * 1000,
       });
       return data.data;

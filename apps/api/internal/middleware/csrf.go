@@ -69,6 +69,28 @@ func newCSRFToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
+const csrfCookieName = "grit_csrf"
+
+// IssueCSRFCookie writes the double-submit CSRF cookie. When force is false
+// and a token already exists, the existing value is returned unchanged.
+// Call with force=true after login/refresh so cross-subdomain SPAs can mutate
+// immediately without waiting for a safe-method round-trip.
+func IssueCSRFCookie(c *gin.Context, cookieDomain string, force bool) (string, error) {
+	if !force {
+		if existing, err := c.Cookie(csrfCookieName); err == nil && existing != "" {
+			return existing, nil
+		}
+	}
+	token, err := newCSRFToken()
+	if err != nil {
+		return "", err
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	c.SetCookie(csrfCookieName, token, 86400, "/", cookieDomain, secure, false)
+	return token, nil
+}
+
 // AutoCSRF is the global, default-on CSRF guard. It only enforces CSRF
 // when the request carries the grit_access auth cookie — i.e., a browser
 // client that the API previously authenticated via cookies. Native
@@ -111,14 +133,7 @@ func AutoCSRF(cookieDomain string) gin.HandlerFunc {
 		// for unauthenticated visitors so SPA bootstrap code can read the
 		// token from a sibling /api/auth/csrf call without a chicken-and-egg.
 		if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
-			if existing, err := c.Cookie(csrfCookie); err != nil || existing == "" {
-				token, gerr := newCSRFToken()
-				if gerr == nil {
-					c.SetSameSite(http.SameSiteLaxMode)
-					secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-					c.SetCookie(csrfCookie, token, 86400, "/", cookieDomain, secure, false)
-				}
-			}
+			_, _ = IssueCSRFCookie(c, cookieDomain, false)
 			c.Next()
 			return
 		}

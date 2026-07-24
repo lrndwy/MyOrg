@@ -127,9 +127,7 @@ export function useUploadFile(folderId?: string | null) {
       form.append("file", file, file.name);
       const params = new URLSearchParams({ source: "cloud", accepts: "all" });
       if (folderId) params.set("folder_id", folderId);
-      const { data } = await apiClient.post(`/api/uploads?${params}`, form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data } = await apiClient.post(`/api/uploads?${params}`, form);
       return data.data as unknown as Upload;
     },
     onSuccess: () => {

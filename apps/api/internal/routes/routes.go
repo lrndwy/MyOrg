@@ -559,6 +559,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// Public auth routes
 	auth := r.Group("/api/auth")
 	{
+		auth.GET("/csrf", authHandler.CSRFToken)
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)

@@ -1,5 +1,10 @@
 import axios from "axios";
 import { getWebAppUrl } from "@/lib/panel-access";
+import {
+  fetchCsrfToken,
+  getCachedCsrfToken,
+  rememberCsrfToken,
+} from "@repo/shared/csrf";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -85,14 +90,24 @@ if (typeof window !== "undefined") {
   void getPublicIPHint();
 }
 
-apiClient.interceptors.request.use((config) => {
-  // Echo grit_csrf into X-CSRF-Token. The cookie is intentionally not
-  // HttpOnly so JS can read it; the API checks both sides match
-  // (double-submit pattern) before accepting a mutation.
-  if (typeof document !== "undefined") {
-    const m = document.cookie.match(/(?:^|; )grit_csrf=([^;]+)/);
-    if (m && config.headers) {
-      config.headers["X-CSRF-Token"] = decodeURIComponent(m[1]);
+apiClient.interceptors.request.use(async (config) => {
+  // FormData must not carry application/json — axios sets multipart boundary.
+  if (typeof FormData !== "undefined" && config.data instanceof FormData && config.headers) {
+    delete config.headers["Content-Type"];
+  }
+
+  const method = (config.method || "get").toUpperCase();
+  const unsafe =
+    method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+
+  if (unsafe && config.headers) {
+    let token = getCachedCsrfToken();
+    if (!token) {
+      token = await fetchCsrfToken(API_URL);
+    }
+    if (token) {
+      config.headers["X-CSRF-Token"] = token;
+      rememberCsrfToken(token);
     }
   }
 
@@ -105,8 +120,6 @@ apiClient.interceptors.request.use((config) => {
   // interceptor below replays the same config object so retries reuse
   // this key — the server caches the first 2xx response for 24h
   // keyed by (method, path, key).
-  const method = (config.method || "get").toUpperCase();
-  const unsafe = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
   if (unsafe && config.headers && !config.headers["Idempotency-Key"]) {
     config.headers["Idempotency-Key"] = generateIdempotencyKey();
   }
@@ -143,6 +156,19 @@ apiClient.interceptors.response.use(
       url.includes("/auth/register") ||
       url.includes("/auth/refresh") ||
       url.includes("/auth/me");
+
+    if (error.response?.status === 403 && !originalRequest._csrfRetry) {
+      const code = error.response?.data?.error?.code;
+      if (code === "CSRF_INVALID") {
+        originalRequest._csrfRetry = true;
+        rememberCsrfToken(null);
+        const token = await fetchCsrfToken(API_URL);
+        if (token && originalRequest.headers) {
+          originalRequest.headers["X-CSRF-Token"] = token;
+        }
+        return apiClient(originalRequest);
+      }
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {

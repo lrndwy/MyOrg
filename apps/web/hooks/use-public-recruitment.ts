@@ -65,7 +65,6 @@ export function usePublicRecruitmentUpload(slug: string) {
       const { data } = await apiClient.post(
         `/api/public/recruitment/${slug}/upload${qs ? `?${qs}` : ""}`,
         form,
-        { headers: { "Content-Type": "multipart/form-data" } },
       );
       return data.data as { url: string; name: string };
     },

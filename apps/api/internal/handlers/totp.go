@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"myorg/apps/api/internal/middleware"
 	"myorg/apps/api/internal/models"
 	"myorg/apps/api/internal/services"
 	"myorg/apps/api/internal/totp"
@@ -215,6 +216,7 @@ func (h *TOTPHandler) Verify(c *gin.Context) {
 	// Mirror tokens into HttpOnly cookies so the browser client doesn't
 	// need to handle them in JS. Native bearer clients use the JSON body.
 	h.AuthService.SetAuthCookies(c, tokens)
+	_, _ = middleware.IssueCSRFCookie(c, h.AuthService.CookieDomain, true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{

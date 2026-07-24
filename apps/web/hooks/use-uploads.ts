@@ -35,8 +35,7 @@ export function useUploadFile() {
 
       const { data } = await apiClient.post(
         `/api/uploads${qs ? `?${qs}` : ""}`,
-        form,
-        { headers: { "Content-Type": "multipart/form-data" } }
+        form
       );
       return data.data as FileRef;
     },

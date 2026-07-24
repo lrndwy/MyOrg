@@ -1,5 +1,10 @@
 import axios from "axios";
 import { getAccessToken } from "./auth";
+import {
+  fetchCsrfToken,
+  getCachedCsrfToken,
+  rememberCsrfToken,
+} from "@repo/shared/csrf";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -41,11 +46,23 @@ export const api = axios.create({
 // double-submit token, paired with the cookie the AutoCSRF middleware
 // enforces. Safe-method requests don't need it; the middleware skips
 // them and issues / refreshes the cookie as a side effect.
-api.interceptors.request.use((config) => {
-  if (typeof document !== "undefined") {
-    const m = document.cookie.match(/(?:^|; )grit_csrf=([^;]+)/);
-    if (m && config.headers) {
-      config.headers["X-CSRF-Token"] = decodeURIComponent(m[1]);
+api.interceptors.request.use(async (config) => {
+  if (typeof FormData !== "undefined" && config.data instanceof FormData && config.headers) {
+    delete config.headers["Content-Type"];
+  }
+
+  const method = (config.method || "get").toUpperCase();
+  const unsafe =
+    method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+
+  if (unsafe && config.headers) {
+    let token = getCachedCsrfToken();
+    if (!token) {
+      token = await fetchCsrfToken(API_URL);
+    }
+    if (token) {
+      config.headers["X-CSRF-Token"] = token;
+      rememberCsrfToken(token);
     }
   }
 
@@ -59,8 +76,6 @@ api.interceptors.request.use((config) => {
 
   // Auto-attach Idempotency-Key on unsafe methods so any mutation gets
   // safe-retry semantics for free.
-  const method = (config.method || "get").toUpperCase();
-  const unsafe = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
   if (unsafe && config.headers && !config.headers["Idempotency-Key"]) {
     config.headers["Idempotency-Key"] = generateIdempotencyKey();
   }

@@ -42,6 +42,12 @@ Build masih memakai `localhost:3001`. Helper `resolvePublicAppUrl` **tidak** lag
 
 Admin & API beda subdomain: cookie `grit_csrf` harus pakai `AUTH_COOKIE_DOMAIN=.heroflow.my.id` agar JS admin bisa baca token CSRF. Set env di API, restart API, login ulang.
 
+Setelah deploy versi terbaru: login/register/refresh juga **langsung** meng-set cookie `grit_csrf`. Client memanggil `GET /api/auth/csrf` jika token belum ada sebelum POST pertama (upload, logout, dll.).
+
+### Upload file 403 (CSRF_INVALID)
+
+Penyebab umum: cookie CSRF belum ada setelah login cross-subdomain, atau upload multipart memakai header `Content-Type: multipart/form-data` manual (tanpa boundary). Pastikan `AUTH_COOKIE_DOMAIN` benar, rebuild API + admin, login ulang, lalu coba upload lagi.
+
 ### API masih `localhost:8080` di browser
 
 Rebuild web/admin dengan `API_URL` production.
